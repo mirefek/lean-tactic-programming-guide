@@ -102,7 +102,11 @@ def myCode3 : Lean.Elab.Tactic.TacticM (Array Nat) := do
     let res ← myCode1 i -- we use "←" to retrieve a value from a monad execution
     a := a.push res -- an assignment without "let" only allowed for mutable variables
     -- Note: since we immediatelly replace a with (a.push i),
-    -- Lean's inner optimization will avoid duplicating the array
+    --   Lean's inner optimization will avoid duplicating the array
+    -- Note for imperative programmers:
+    --   "a.push res" alone cannot work, an external function cannot
+    --   change the value of "a", Lean is a pure functional language
+    --   after all
     (Lean.logInfo m!"got: {res}" : Lean.Elab.Tactic.TacticM Unit)
     -- Note: The type annotation is not necessary. It just helps Lean compiler
     -- to be faster. Try to delete it to see what happens.
