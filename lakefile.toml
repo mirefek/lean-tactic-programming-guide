@@ -1,0 +1,12 @@
+name = "tactic-programming-beginner-guide"
+version = "0.1.0"
+keywords = ["math"]
+defaultTargets = ["TacticProgrammingGuide"]
+
+[leanOptions]
+pp.unicode.fun = true
+autoImplicit = false
+
+[[require]]
+name = "Qq"
+scope = "leanprover-community"

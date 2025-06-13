@@ -1,0 +1,15 @@
+{"version": "1.1.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/leanprover-community/quote4",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover-community",
+   "rev": "e1d2994e0acdee2f0c03c9d84d28a5df34aa0020",
+   "name": "Qq",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "master",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
+ "name": "«tactic-programming-beginner-guide»",
+ "lakeDir": ".lake"}
