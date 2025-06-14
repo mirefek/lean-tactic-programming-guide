@@ -536,6 +536,10 @@ is the place to outline what the Syntax type is.
 There is much more to say,
 You can check out a more advanced Lean Metaprogramming book
 https://leanprover-community.github.io/lean4-metaprogramming-book/
+Another nice resource of what could be a problem when you get stuck
+on a mysterious metaprogramming problem:
+https://github.com/leanprover-community/mathlib4/wiki/Metaprogramming-gotchas
+
 But also, just be curious -- ctrl-click on the functions we are using
 to see what they are doing.
 
