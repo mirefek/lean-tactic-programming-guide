@@ -1,4 +1,5 @@
 import Lean -- Lean's metaprogramming
+import Batteries
 import Qq -- convenient term building / matching
 
 /-
@@ -47,7 +48,7 @@ imperative languages (C, Python, ...),
 its definitions cannot change, and its functions depend only on the arguments,
 and cannot have side effects.
 
-However, functional programming languages (such as Haskell) have
+However, functional programming languages (such as Haskell) developed
 a way to write imperative style through
 * theory of monads
 * do syntax to hide most of monads from the user.
@@ -64,9 +65,9 @@ Lean.Meta.MetaM -- a monad that only has access to information about
   proofstate, so a TacticM can call a MetaM but not the other way around
   (we would have to provide the TacticM all the extra data it needs)
 
-I think the best way to demostrate imperative programming in Lean is
-by showing an example. Except Lean.logInfo, we are still not using any
-API to access the proofstate, only showcasing Lean as an imperative
+We simply demostrate imperative programming in Lean is
+by showing an example. We are still not using any API to access
+the proofstate (except logInfo), only showcasing Lean as an imperative
 programming language.
 -/
 
@@ -86,6 +87,7 @@ def myCode1 (n : Nat) : Lean.Meta.MetaM Nat := do
   return k
 
 -- a TacticM monad taking a Nat, without a return value
+-- here the "do" is actually not necessary, since it is a single command
 def myCode2 (n : Nat) : Lean.Elab.Tactic.TacticM Unit := do
   Lean.logInfo m!"Calling Tactic1 ({n})"
 
@@ -217,12 +219,11 @@ def n2 : Name := ``t1e -- double backtick = resolve name
 #print n2
 
 -- The way Expr handles variables might seem messy at first -- there are
-#check Expr.bvar -- variable bound / quantified inside that Expr
+#check Expr.bvar -- variable bound / quantified inside that Expr, represented with an index
 #check Expr.fvar -- variable in the context
 #check Expr.mvar -- metavariable
 #check Expr.const -- a defined constant
 
-#check Meta.Context
 -- Moreover, the username is never a unique identifier of a variable,
 -- Lean wants to allow in principle multiple variables with the same name.
 -- so free variables are identified by
@@ -239,7 +240,7 @@ String. However, in Lean, logInfo can show a term that allows
 mouse hover showing types, etc. In fact, there is
 -/
 #check MessageData -- interactive expression
-#check Format -- ignore for now, string with pretty-printing metadata
+#check Format -- almost string (with) pretty-printing metadata)
 #check String -- standard list of characters
 
 -- Examine the print of the following logInfo.
@@ -306,39 +307,32 @@ a mysterious error that we cannot put together
 because it expects a proof of p.
 
 Such errors are hard to decode, so it is better to ensure
-that we only set a mvar when we can. Unfortunatelly,
-the safe function is not as intuitive as MVarId.assign.
-
-The right approach is utilize the function "isDefEq".
-This is a monadic function that returns a Bool but it does more than
-the name suggests. If there are metavariables in the expressions,
-isDefEq tries to assign them in order to make the two expressions equal.
-If it succeeds, it returns True, and the metavariables remain assigned.
-If it returns False, the two terms cannot be made the same,
-and nothing changed.
-
-Let's fix the tactic.
+that we only set a mvar when we can.
+Fortunatelly, Batteries have
+a function that checks if something can be assigned.
 -/
+#check MVarId.assignIfDefEq
 
 -- correct version
 def runTrivial : TacticM Unit := do
   -- we retrieve the metavariable represesnting the current goal
   let goal : MVarId ← getMainGoal
   -- and assign it to be True.intro
-  unless ←isDefEq (mkMVar goal) q(True.intro) do
-    throwError m!"Goal {← goal.getType} is not True"
+  goal.assignIfDefEq q(True.intro)
 
 -- now we got the correct error if we try to run runTrivial2
 -- on the wrong goal
 example (p : Prop) : p → p ∧ True := by
   intro h; constructor
-  run_tac runTrivial -- our error :-)
+  run_tac runTrivial -- error where it should be :-)
   run_tac runTrivial
 
 /-
-It looks that assumption should be similarly easy.
-We would like to go through all assumptions in the current context,
-try isDefEq with all of them, and finish if it succeeds.
+To implement assumption, we want to loop through
+all the assumptions, and try to use them.
+So we need
+* Access to the assumptions
+* Exception handling
 
 How do we get the local context? In general contexts are
 assigned to metavariables but we can just use
@@ -350,19 +344,19 @@ and then retrieve the context using getLCtx
 First, we can just print the assumptions.
 -/
 
-#check MetaM
-
 example (n : Nat) (hn : n > 5) : True := by
   run_tac
+    -- Note: You will see _example in the list, which is there in case
+    -- we wanted to build a recursive definition
     withMainContext do
       let ctx ← getLCtx
       -- go through all local declarations
-      -- Note: the questionmark is just a part of the name
+      -- Note: the questionmark in decl? is just a part of the name
       --   (option type practice)
       for (decl? : Option LocalDecl) in ctx.decls do
         match decl? with
         | some (decl : LocalDecl) =>
-          (logInfo m!"{mkFVar decl.fvarId} : {decl.type}" : TacticM Unit)
+          (logInfo m!"{mkFVar decl.fvarId} : {decl.type}  -- {repr decl.kind}" : TacticM Unit)
         | none => pure ()
   trivial
 
@@ -375,8 +369,12 @@ def runAssumption : TacticM Unit := -- we don't have to start with do here (but 
     for (decl? : Option LocalDecl) in ctx.decls do
       match decl? with
       | some (decl : LocalDecl) =>
-        if ←isDefEq (mkMVar goal) (mkFVar decl.fvarId) then
-          return -- succeeded :-), we don't need anything else
+        if decl.kind != .default then continue
+        try
+          goal.assignIfDefEq (mkFVar decl.fvarId)
+          return -- if succeeded, we are done
+        catch _ =>
+          pure () -- ignore the exception
       | none => pure ()
     throwError "Assumption not found"
 
@@ -388,29 +386,46 @@ example (p : Prop) : p → p ∧ True := by
 
 /-
 The remaining two tactics require creating a new metavariable.
-in runConstructor, we just decompose And, contrary to the general tactic.
-First, we just write the function that decomposes and And expression
-in two ways, using Qq, and using raw terms.
+A new metavariable is created using.
+-/
+#check mkFreshExprMVar
+/-
+However a good practice is to make the goal variables
+"syntheticOpaque" -- then Lean knows that they are somewhat
+important, and doesn't unify them willy-nilly.
+
+One way is to use the following function
+-/
+#check mkFreshExprSyntheticOpaqueMVar
+/-
+although if you Ctrl-click on it, you find that it just
+calls mkFreshExprMVar with a specific kind.
 -/
 
+/-
+In our runConstructor, we will decompose And.
+(we will not attempt general constructor)
+First, we just write the function that reads the type A ∧ B from the goal,
+and extracts the two type expressions A and B.
+-/
 def extractAndGoals1 : TacticM (Expr × Expr) := do
   let tgt ← getMainTarget -- equivalent to (← getGoal).getType
   have quotedTgt : Q(Prop) := tgt -- change the apparent type
   match quotedTgt with
-  | ~q($p ∧ $q) => -- Qq match, needs at least MetaM to work
+  | ~q($p ∧ $q) => -- Qq match, must run in MetaM or higher
     return (p, q)
   | _ => throwError m!"Goal {tgt} is not of the form (?_ ∧ ?_)"
 
 /-
-Qq is handy but is not always reliable, so it is worth knowing
-how to do these things "manually"
+Qq is handy but it is worth knowing how to do these
+things "manually"
 -/
 def extractAndGoals2 : TacticM (Expr × Expr) := do
   let tgt ← getMainTarget
-  let tgt ← whnf tgt -- optional, head simplification
-  match tgt.getAppFnArgs with
-  | (`And, #[p, q]) =>  return (p, q)
-  | _ => throwError m!"Goal {tgt} is not of the form (?_ ∧ ?_)"
+  -- an alternative syntax to match ... with
+  let (`And, #[p, q]) := tgt.getAppFnArgs
+    | throwError m!"Goal {tgt} is not of the form (?_ ∧ ?_)"
+  return (p, q)
 
 -- let's check that our decomposition of "And" works.
 example (p q : Prop) (h : p ∧ q) : p ∧ q := by
@@ -421,7 +436,10 @@ example (p q : Prop) (h : p ∧ q) : p ∧ q := by
     logInfo m!"Expr extraction: {a1} AND {b1}"
   assumption
 
--- Now, let's build the goal
+/--
+Replaces the main goal (?_ : A ∧ B) with
+And.intro (?left : A) (?right : B)
+-/
 def runConstructor : TacticM Unit := do
   withMainContext do -- try to comment out this line to see what breaks
     let goal ← getMainGoal
@@ -440,7 +458,61 @@ example (p : Prop) : p → p ∧ True := by
   run_tac runAssumption
   run_tac runTrivial
 
--- TODO: implement intro
+def runIntro (name : Name) : TacticM Unit := do
+  withMainContext do
+    let goal ← getMainGoal
+    let lctx ← getLCtx
+    let .forallE _ type body c ← goal.getType
+      | throwError "Goal not of the form of an implication or quantification"
+    let fvarId : FVarId ← mkFreshFVarId -- allocate new variable
+    let lctx' := lctx.mkLocalDecl fvarId name type c -- put into a new context
+    let fvar : Expr := mkFVar fvarId
+    let body := body.instantiate1 fvar -- convert bvar to fvar
+    withLCtx' lctx' do
+      -- mkFreshExprMVar uses the current monadic context to
+      let newMVar ← mkFreshExprMVar body (kind := .syntheticOpaque)
+      let newVal ← mkLambdaFVars #[fvar] newMVar
+      goal.assign newVal
+      replaceMainGoal [newMVar.mvarId!]
+
+-- Note: Since Lean already implemented intro,
+-- there is a shortcut ;-)
+def runIntro2 (name : Name) : TacticM Unit := do
+  let goal ← getMainGoal
+  let (_, m) ← goal.intro name
+  replaceMainGoal [m]
+
+example (p : Prop) : p → p ∧ True := by
+  run_tac runIntro `h
+  run_tac runConstructor
+  run_tac runAssumption
+  run_tac runTrivial
+
+/-
+In this example, we did goal-oriented tactics,
+so let us show how we could add a new have element
+to the local context.
+-/
+example (a b : Prop) (ha : a) (hab : a → b) : b := by
+  run_tac
+    withMainContext do
+      let goal ← getMainGoal
+      let lctx ← getLCtx
+      -- find appropriate free variables
+      let some ehab := lctx.findFromUserName? `hab | throwError "not found"
+      let some eha := lctx.findFromUserName? `ha | throwError "not found"
+      let e : Expr := (.app -- build the term "hab ha"
+        (mkFVar ehab.fvarId)
+        (mkFVar eha.fvarId)
+      )
+      let t ← inferType e -- t = "b", e = "hab hb"
+      -- goal: ctx |- mainGoal
+      let goal2 ← goal.assert `hb t e
+      -- goal2: ctx |- t -> mainGoal
+      let (_, goal3) ← goal2.intro `hb
+      -- goal3: ctx, t |- mainGoal
+      replaceMainGoal [goal3]
+  exact hb
 
 end Chapter4TacticCode
 

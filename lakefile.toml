@@ -10,3 +10,7 @@ autoImplicit = false
 [[require]]
 name = "Qq"
 scope = "leanprover-community"
+
+[[require]]
+name = "batteries"
+scope = "leanprover-community"
