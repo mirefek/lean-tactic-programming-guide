@@ -17,10 +17,10 @@ Lean metaprogramming is about, and be able to write some simple tactics.
 # Beginner's Guide to Lean Tactic Programming
 
 Tactics are in principle arbitrary programs that opearate on the proof state.
-We can write such programs in place in the tactic proof, such as in the following example.
+We can write such programs in-place in the tactic proof, such as in the following example.
 
 This example tactic doesn't do anything except logging "Hello world".
-Put your cursor at the blue-underlined run_tac to see the message.
+Put your cursor at the blue-underlined `run_tac` to see the message.
 
 Do not bother with the type of `Lean.logInfo` too much so far,
 it is simply a logging / printing function.
@@ -64,7 +64,7 @@ In the following example, we show two monads.
   `TacticM` all the extra data it needs)
 
 We will now demostrate imperative programming in Lean with some examples. So far,
-we are not using any API to access the proofstate (except `logInfo`), only showcasing
+we are not using any API to access the proofstate, only showcasing
 Lean as an imperative programming language.
 -/
 
@@ -126,9 +126,14 @@ Of course, this is not exhaustive. Advanced topics include
 ## (2) What really is a proof state
 
 On the core level, a proof is a term, a so called "proof term" that testifies the truth
-of the given proposition. When we are proving a theorem, at every moment, we have a partially
-built proof term with holes, so called metavariables. Once all metavariables are assigned,
-the proof is finished. Metavariables are the variables with a question mark before their name.
+of the given proposition. When we are proving a theorem, at every moment, we have
+a partially built proof term with holes, so called metavariables.
+Most tactic steps fill one hole (formally assigns one metavariable) with a subterm,
+possibly containing further metavariables.
+
+The proof is finished once all metavariables are assigned,
+i.e. all holes are filled, i.e all goals are closed.
+Metavariables are the variables with a question mark before their name.
 
 As an example, we will show a proof of `p → p ∧ True`, and write
 the partially filled proof term in between.
@@ -327,7 +332,7 @@ To implement `assumption`, we want to loop through all the assumptions,
 and try to use them one by one.
 The list of assumptions, which appears above the `⊢` in the infoview, is called
 the local context. How do we get the local context? In general each metavariable
-has its own local context, but we can just use `withMainContext`.
+(i.e. goal) has its own local context, but we can just use `withMainContext`.
 This puts the local context of the current goal into the monadic context,
 and then we can retrieve the context using `getLCtx`
 
