@@ -119,9 +119,9 @@ example : True := by
 Of course, this is not exhaustive. Advanced topics include
 * What is the theory behind monads, how to use custom monads.
 * What are further programming-focused functions & datastructures in Lean,
-  such as `Std.HashMap`, `foldM`, the `IO` monad, etc
+  such as `Std.HashMap`, `foldM`, the `IO` monad, etc.
 * different types of exceptions -- `throwError`, `panic!`
-* `partial` functions to make Lean kernel less annoying
+* `partial` functions to bypass Lean's termination checker
 ...
 
 ## (2) What really is a proof state
