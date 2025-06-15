@@ -55,8 +55,8 @@ a way to write imperative style through
 
 We will keep the monad theory hidden, here we just say that a monad
 in general denotes an imperative program. There are several monads depending
-on what state they have access to. In the following example, we show an example
-of two monads.
+on what state they have access to. In the following example, we show
+two monads.
 
 Lean.Elab.Tactic.TacticM -- the top level tactic monad, has access to
   all the data from the proofstate
@@ -65,17 +65,13 @@ Lean.Meta.MetaM -- a monad that only has access to information about
   proofstate, so a TacticM can call a MetaM but not the other way around
   (we would have to provide the TacticM all the extra data it needs)
 
-We simply demostrate imperative programming in Lean is
-by showing an example. We are still not using any API to access
-the proofstate (except logInfo), only showcasing Lean as an imperative
+We demostrate imperative programming in Lean
+by showing an example. So far, we are not using any API to access
+the proofstate (except logInfo), only showcase Lean as an imperative
 programming language.
 -/
 
 namespace Chapter1Coding
-
--- a MetaM monad returning a Nat
--- the "do" is important to use "do notation", otherwise, we would have to
--- use Lean's standard syntax, and compose the monad manually
 
 --         parameters     monad type   return value
 --             v               v         v
@@ -86,20 +82,19 @@ def myCode1 (n : Nat) : Lean.Meta.MetaM Nat := do
   Lean.logInfo m!"{n} -> {k}"
   return k
 
--- a TacticM monad taking a Nat, without a return value
--- here the "do" is actually not necessary, since it is a single command
+--         parameters       monad type    no return value (like void in C)
+--             v                  v               v
 def myCode2 (n : Nat) : Lean.Elab.Tactic.TacticM Unit := do
   Lean.logInfo m!"Calling Tactic1 ({n})"
 
--- a TacticM monad returning an array of Nat,
 -- Array is basically the same thing as List with a different
 -- implementation (analogous to C++ vectors)
 def myCode3 : Lean.Elab.Tactic.TacticM (Array Nat) := do
   Lean.logInfo "Calling Tactic2"
   myCode2 7
    -- lean variables are immutable but the do notation
-   -- allows to break this
-  let mut a := #[] -- "#" denotes it is an empty Array instead of empty List
+   -- allows to break this using "let mut"
+  let mut a : Array Nat := #[] -- "#" denotes it is an empty Array instead of empty List
   for i in List.range 5 do
     let res ← myCode1 i -- we use "←" to retrieve a value from a monad execution
     a := a.push res -- an assignment without "let" only allowed for mutable variables
@@ -109,9 +104,7 @@ def myCode3 : Lean.Elab.Tactic.TacticM (Array Nat) := do
     --   "a.push res" alone cannot work, an external function cannot
     --   change the value of "a", Lean is a pure functional language
     --   after all
-    (Lean.logInfo m!"got: {res}" : Lean.Elab.Tactic.TacticM Unit)
-    -- Note: The type annotation is not necessary. It just helps Lean compiler
-    -- to be faster. Try to delete it to see what happens.
+    Lean.logInfo m!"got: {res}"
   myCode2 15
   return a
 
@@ -131,10 +124,10 @@ example : True := by
 end Chapter1Coding
 
 /-
-Of course, this is not exhaustive, advanced topics include
+Of course, this is not exhaustive. Advanced topics include
 * What is the theory behind monads, how to use custom monads.
 * What are further programming-focused functions & datastructures in Lean,
-  such as Std.HashMap, foldM, etc
+  such as Std.HashMap, foldM, IO monad, etc
 * different types of exceptions -- panic, throwError
 ...
 
@@ -154,15 +147,15 @@ the partially filled proof term in between.
 namespace Chapter2Datatypes
 
 theorem p_imp_p_true (p : Prop) : p → p ∧ True := by
-  -- example : True ∧ True := ?_
+  -- example : p → p ∧ True := ?_
   intro h
-  -- example : True ∧ True := (fun h => ?_)
+  -- example : p → p ∧ True := (fun h => ?_)
   constructor
-  -- example : True ∧ True := (fun h => And.intro ?left ?right)
+  -- example : p → p ∧ True := (fun h => And.intro ?left ?right)
   assumption
-  -- example : True ∧ True := (fun h => And.intro h ?right)
+  -- example : p → p ∧ True := (fun h => And.intro h ?right)
   trivial
-  -- example : True ∧ True := (fun h => And.intro h True.intro)
+  -- example : p → p ∧ True := (fun h => And.intro h True.intro)
 
 end Chapter2Datatypes
 
@@ -205,7 +198,7 @@ def t1x : Q(Nat) := t1
 #check t1e
 #check t1x
 
--- Basically all Lean types are in namespace Lean,
+-- Basically all metaprogramming types are in namespace Lean,
 -- repeating the prefix is getting annoying
 open Lean
 
@@ -220,7 +213,7 @@ def n2 : Name := ``t1e -- double backtick = resolve name
 
 -- The way Expr handles variables might seem messy at first -- there are
 #check Expr.bvar -- variable bound / quantified inside that Expr, represented with an index
-#check Expr.fvar -- variable in the context
+#check Expr.fvar -- named variable in the context
 #check Expr.mvar -- metavariable
 #check Expr.const -- a defined constant
 
@@ -300,7 +293,7 @@ example (p : Prop) : p → p ∧ True := by -- !!!
 
 /-
 MVarId.assign happily closed the goal. Then we correctly
-closed the goal (?right : p), and at the very end,
+closed the goal (?right : True), and at the very end,
 after Lean examined the entire proof term, we got
 a mysterious error that we cannot put together
 "@And.intro p True" and "True.intro"
@@ -352,18 +345,18 @@ example (n : Nat) (hn : n > 5) : True := by
       let ctx ← getLCtx
       -- go through all local declarations
       -- Note: the questionmark in decl? is just a part of the name
-      --   (option type practice)
+      --   (good practice for Option type)
       for (decl? : Option LocalDecl) in ctx.decls do
         match decl? with
         | some (decl : LocalDecl) =>
-          (logInfo m!"{mkFVar decl.fvarId} : {decl.type}  -- {repr decl.kind}" : TacticM Unit)
+          logInfo m!"{mkFVar decl.fvarId} : {decl.type}  -- {repr decl.kind}"
         | none => pure ()
   trivial
 
 -- We have all the components, so let's implement the assumption tactic.
 
 def runAssumption : TacticM Unit := -- we don't have to start with do here (but can)
-  withMainContext do -- but have to do it here
+  withMainContext do -- but have to "do" it here
     let goal ← getMainGoal
     let ctx ← getLCtx
     for (decl? : Option LocalDecl) in ctx.decls do
@@ -491,10 +484,10 @@ example (p : Prop) : p → p ∧ True := by
 /-
 In this example, we did goal-oriented tactics,
 so let us show how we could add a new have element
-to the local context.
+to the local context -- a custom "have"
 -/
 example (a b : Prop) (ha : a) (hab : a → b) : b := by
-  run_tac
+  run_tac -- we want to emulate: "have hb := hab ha"
     withMainContext do
       let goal ← getMainGoal
       let lctx ← getLCtx
@@ -512,7 +505,7 @@ example (a b : Prop) (ha : a) (hab : a → b) : b := by
       let (_, goal3) ← goal2.intro `hb
       -- goal3: ctx, t |- mainGoal
       replaceMainGoal [goal3]
-  exact hb
+  exact hb -- look at the tactic state before closing the goal ;-)
 
 end Chapter4TacticCode
 
