@@ -521,31 +521,31 @@ Now that we can construct syntax, we can make a macro. A macro is a rule that op
 syntax, and these rules are used when the syntax is being elaborated.
 -/
 
-/-- `constructor'` is a version of `constructor` that only applies to `And` goals -/
-macro "constructor'" : tactic => `(tactic| apply And.intro)
-/- Doc-string for `trivial'` -/
-macro "trivial'" : tactic => `(tactic| exact True.intro)
+/-- `my_constructor` is a version of `constructor` that only applies to `And` goals -/
+macro "my_constructor" : tactic => `(tactic| apply And.intro)
+/- Doc-string for `my_trivial` -/
+macro "my_trivial" : tactic => `(tactic| exact True.intro)
 
 -- note that by hovering you can see the doc-strings of the macros
 example (p : Prop) : p → p ∧ True := by
-  intro h; constructor'; assumption; trivial'
+  intro h; my_constructor; assumption; my_trivial
 
 /-
 We can also write elaborators for our version of `intro` and `assumption`
 -/
 
 /-- Our variant of `intro`. -/
-elab "intro'" a:ident : tactic => do
+elab "my_intro" a:ident : tactic => do
   -- `a` has type ``TSyntax `ident``. This is the syntax category for identifiers
   let aName : Name := a.getId
   runIntro aName
 
 /-- Our variant of `assumption`. -/
-elab "assumption'" : tactic => do
+elab "my_assumption" : tactic => do
   runAssumption
 
 example (p : Prop) : p → p ∧ True := by
-  intro' h; constructor'; assumption'; trivial'
+  my_intro h; my_constructor; my_assumption; my_trivial
 
 /-
 The `macro` and `elab` commands are nice, but for more complicated syntax, you may need
@@ -554,24 +554,24 @@ a bit more flexibility. This can be achieved by separately defining the syntax w
 For example, the above tactics can be defined as follows:
 -/
 
-/-- Doc-string for `constructor''`. -/
-syntax "constructor''" : tactic
-syntax "trivial''" : tactic
-syntax "intro''" ident : tactic
-syntax "assumption''" : tactic
+/-- Doc-string for `my_constructor'`. -/
+syntax "my_constructor'" : tactic
+syntax "my_trivial'" : tactic
+syntax "my_intro'" ident : tactic
+syntax "my_assumption'" : tactic
 
 macro_rules
-| `(tactic| constructor'') => `(tactic| apply And.intro)
-| `(tactic| trivial'')     => `(tactic| exact True.intro)
+| `(tactic| my_constructor') => `(tactic| apply And.intro)
+| `(tactic| my_trivial')     => `(tactic| exact True.intro)
 
 elab_rules : tactic
 -- to match a variable, we use the `$` anti-quotation.
 -- we can optionally annotate the syntax kind `ident` with `$h:ident` instead of `$h`.
-| `(tactic| intro'' $h:ident) => runIntro h.getId
-| `(tactic| assumption'') => runAssumption
+| `(tactic| my_intro' $h:ident) => runIntro h.getId
+| `(tactic| my_assumption') => runAssumption
 
 example (p : Prop) : p → p ∧ True := by
-  intro'' h; constructor''; assumption''; trivial''
+  my_intro' h; my_constructor'; my_assumption'; my_trivial'
 
 /-
 For example, these `macro_rules` come in handy when working with syntax arrays.
@@ -579,7 +579,7 @@ To illustrate this, let's define a simple form of the `simp_rw` tactic.
 We will use the syntax kind `Lean.Parser.Tactic.location`, so let's open the namespace:
 -/
 open Parser.Tactic
-syntax "simp_rw " "[" term,* "]" (location)? : tactic
+syntax "my_simp_rw " "[" term,* "]" (location)? : tactic
 /-
 In the syntax `term,*`
 - `*` signifies that it is a possibly empty list. `+` instead gives a nonempty list.
@@ -593,28 +593,28 @@ Now we can use `macro_rules` to define the tactic
 
 macro_rules
 -- not all syntax kind annotations are required here. They have been added for clarity.
-| `(tactic| simp_rw [$e:term, $[$es:term],*] $[$loc:location]?) =>
-  `(tactic| simp only [$e:term] $[$loc:location]?; simp_rw [$[$es:term],*] $[$loc:location]?)
-| `(tactic| simp_rw [$e:term] $[$loc:location]?) => `(tactic| simp only [$e:term] $[$loc:location]?)
-| `(tactic| simp_rw [] $(_loc)?) => `(tactic| skip)
+| `(tactic| my_simp_rw [$e:term, $[$es:term],*] $[$loc:location]?) =>
+  `(tactic| simp only [$e:term] $[$loc:location]?; my_simp_rw [$[$es:term],*] $[$loc:location]?)
+| `(tactic| my_simp_rw [$e:term] $[$loc:location]?) => `(tactic| simp only [$e:term] $[$loc:location]?)
+| `(tactic| my_simp_rw [] $(_loc)?) => `(tactic| skip)
 
 -- Let's test it
 example : ∀ n m : Nat, m + n + 1 - 1 = n + m := by
-  simp_rw [Nat.add_one_sub_one, Nat.add_comm, implies_true]
+  my_simp_rw [Nat.add_one_sub_one, Nat.add_comm, implies_true]
 
 -- or we can use `elab_rules` to loop through the array of terms directly
 
-syntax "simp_rw' " "[" term,* "]" (Parser.Tactic.location)? : tactic
+syntax "my_simp_rw' " "[" term,* "]" (Parser.Tactic.location)? : tactic
 
 elab_rules : tactic
-| `(tactic| simp_rw' [$[$es:term],*] $[$loc:location]?) =>
+| `(tactic| my_simp_rw' [$[$es:term],*] $[$loc:location]?) =>
   for e in es do
     let simpOnlyTactic ← `(tactic| simp only [$e:term] $[$loc:location]?)
     evalTactic simpOnlyTactic
 
 -- Let's test it
 example : ∀ n m : Nat, m + n + 1 - 1 = n + m := by
-  simp_rw' [Nat.add_one_sub_one, Nat.add_comm, implies_true]
+  my_simp_rw' [Nat.add_one_sub_one, Nat.add_comm, implies_true]
 
 /-
 As you can see, the syntax matching can get quite complicated. Unfortunately there is
@@ -624,33 +624,33 @@ Some more advance things you can do include
 -/
 
 -- ## Defining syntax
--- we could have defined the `simp_rw` syntax like this instead:
+-- we could have defined the `my_simp_rw` syntax like this instead:
 syntax rwRule := ("← " <|> "<- ")? term
 syntax rwRuleSeq := "[" rwRule,* "]"
-syntax "simp_rw " rwRuleSeq (location)? : tactic
+syntax "my_simp_rw " rwRuleSeq (location)? : tactic
 
 -- ### Defining a syntax category
--- As a toy example, if you want to be able to write `+` and `*` backwards, you can do this:
+-- As a toy example, if you want to be able to write terms in natural language
 
 declare_syntax_cat reverse
 
-syntax reverse " + " reverse : reverse
-syntax reverse " * " reverse : reverse
+syntax reverse " plus " reverse : reverse
+syntax reverse " times " reverse : reverse
 syntax "(" reverse ")" : reverse
 syntax num : reverse -- the `num` syntax category is used for number literals like `42`
-syntax "reversed[" reverse "]" : term
+syntax "language[" reverse "]" : term
 
 macro_rules
-| `(reversed[$a + $b]) => `(reversed[$b] + reversed[$a])
-| `(reversed[$a * $b]) => `(reversed[$b] * reversed[$a])
-| `(reversed[($a)])    => `((reversed[$a]))
-| `(reversed[$n:num])  => `($n:num)
+| `(language[$a plus $b]) => `(language[$a] + language[$b])
+| `(language[$a times $b]) => `(language[$a] * language[$b])
+| `(language[($a)])    => `((language[$a]))
+| `(language[$n:num])  => `($n:num)
 
 /-
-If we now write down the term `reversed[1 + (2 * 4)]`,
-then the `macro_rules` will turn this into `(4 * 2) + 1`.
+If we now write down the term `language[1 plus (2 times 4)]`,
+then the `macro_rules` will turn this into `1 + (2 * 4)`.
 -/
-#check (reversed[1 + (2 * 4)] : Int)
+#check (language[1 plus (2 times 4)] : Int)
 
 /-
 ## Finishing notes
