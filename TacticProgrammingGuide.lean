@@ -667,10 +667,11 @@ Now we can use `macro_rules` to define the tactic
 
 macro_rules
 /-
- to match optional syntax, or a list of syntax, we use the `$[...]` anti-quotation.
+To match optional syntax, or a list of syntax, we use the `$[...]` anti-quotation.
 - `$[...]?` matches optional syntax
 - `$[...],*` matches a possibly empty comma-separated list of syntax
-not all syntax kind annotations are required here. They have been added for clarity.
+Square brackets without a dollar represent explicit symbols in the syntax.
+Not all syntax kind annotations are required here. They have been added for clarity.
 -/
 | `(tactic| my_simp_rw [$e:term, $[$es:term],*] $[$loc:location]?) =>
   `(tactic| simp only [$e:term] $[$loc:location]?; my_simp_rw [$[$es:term],*] $[$loc:location]?)
