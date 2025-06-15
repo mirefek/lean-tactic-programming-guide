@@ -121,6 +121,7 @@ Of course, this is not exhaustive. Advanced topics include
 * What are further programming-focused functions & datastructures in Lean,
   such as `Std.HashMap`, `foldM`, the `IO` monad, etc
 * different types of exceptions -- `throwError`, `panic!`
+* `partial` / `unsafe` functions to make Lean kernel less annoying
 ...
 
 ## (2) What really is a proof state
