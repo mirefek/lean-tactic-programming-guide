@@ -90,7 +90,7 @@ def myCode3 : Lean.Elab.Tactic.TacticM (Array Nat) := do
    -- lean variables are immutable but the do notation
    -- allows to break this using "let mut"
   let mut a : Array Nat := #[] -- "#" denotes it is an empty Array instead of empty List
-  for i in [:5] do -- `[:5]` or `[0:5]` loops through `0,1,2,3,4` using `Std.Range.mk`
+  for i in [:5] do -- `[:5]` or `[0:5]` loops through `0,1,2,3,4` using `Std.Range`
     let res ← myCode1 i -- we use "←" to retrieve a value from a monad execution
     a := a.push res -- an assignment without "let" is only allowed for mutable variables
     -- Note: since we immediatelly replace a with (a.push i),
