@@ -496,16 +496,161 @@ example (a b : Prop) (ha : a) (hab : a → b) : b := by
 /-
 ## (5) How to declare syntax for a new tactic
 
-TODO: to be honest, I (Mirek) don't understand this much,
-so I am happy to learn here too :-).
-
-I should be able to write
-the syntax for the 4 tactics from the previous chapter
-(fair start, so can can complete the example),
-but then I would like to understand more features of the "elab"
-command, and when it must be split into "syntax". Also I think this
-is the place to outline what the Syntax type is.
+So far, we have discussed how tactics work internally, but another important part of
+tactics is the syntax that we use to call them. When dealing with syntax,
+we use the types `Lean.Syntax` and `Lean.TSyntax`. Don't worry about the implementation
+of `Lean.Syntax`, as it is quite messy.
 -/
+#check Lean.Syntax
+#check Lean.TSyntax
+/--
+Just like `Q(...)` is an annotated version of `Expr`, `TSyntax ..` is an annotated version
+of `Syntax`. The most common annotations are ``TSyntax `tactic`` and ``TSyntax `term``.
+We can construct `Syntax` using quotations like `` `(kind| syntax)``. This only works
+in a monad like `MetaM`.
+-/
+def s1 : MetaM (TSyntax `tactic) := `(tactic| apply And.intro)
+def s2 : MetaM (TSyntax `term) := `(1+2+3) -- equivalent to `(term| 1+2+3)
+
+-- As you can see, the produced `Syntax` is quite messy
+#eval s1
+#eval s2
+
+/-
+Now that we can construct syntax, we can make a macro. A macro is a rule that operates on
+syntax, and these rules are used when the syntax is being elaborated.
+-/
+
+/-- `constructor'` is a version of `constructor` that only applies to `And` goals -/
+macro "constructor'" : tactic => `(tactic| apply And.intro)
+/- Doc-string for `trivial'` -/
+macro "trivial'" : tactic => `(tactic| exact True.intro)
+
+-- note that by hovering you can see the doc-strings of the macros
+example (p : Prop) : p → p ∧ True := by
+  intro h; constructor'; assumption; trivial'
+
+/-
+We can also write elaborators for our version of `intro` and `assumption`
+-/
+
+/-- Our variant of `intro`. -/
+elab "intro'" a:ident : tactic => do
+  -- `a` has type ``TSyntax `ident``. This is the syntax category for identifiers
+  let aName : Name := a.getId
+  runIntro aName
+
+/-- Our variant of `assumption`. -/
+elab "assumption'" : tactic => do
+  runAssumption
+
+example (p : Prop) : p → p ∧ True := by
+  intro' h; constructor'; assumption'; trivial'
+
+/-
+The `macro` and `elab` commands are nice, but for more complicated syntax, you may need
+a bit more flexibility. This can be achieved by separately defining the syntax with a
+`syntax` command, and defining what the syntax does using `macro_rules` or `elab_rules`.
+For example, the above tactics can be defined as follows:
+-/
+
+/-- Doc-string for `constructor''`. -/
+syntax "constructor''" : tactic
+syntax "trivial''" : tactic
+syntax "intro''" ident : tactic
+syntax "assumption''" : tactic
+
+macro_rules
+| `(tactic| constructor'') => `(tactic| apply And.intro)
+| `(tactic| trivial'')     => `(tactic| exact True.intro)
+
+elab_rules : tactic
+-- to match a variable, we use the `$` anti-quotation.
+-- we can optionally annotate the syntax kind `ident` with `$h:ident` instead of `$h`.
+| `(tactic| intro'' $h:ident) => runIntro h.getId
+| `(tactic| assumption'') => runAssumption
+
+example (p : Prop) : p → p ∧ True := by
+  intro'' h; constructor''; assumption''; trivial''
+
+/-
+For example, these `macro_rules` come in handy when working with syntax arrays.
+To illustrate this, let's define a simple form of the `simp_rw` tactic.
+We will use the syntax kind `Lean.Parser.Tactic.location`, so let's open the namespace:
+-/
+open Parser.Tactic
+syntax "simp_rw " "[" term,* "]" (location)? : tactic
+/-
+In the syntax `term,*`
+- `*` signifies that it is a possibly empty list. `+` instead gives a nonempty list.
+- `,` signifies that it is a comma-separated list. Omitting the `,` gives a space separated list.
+In the syntax `(Parser.Tactic.location)?`
+- `Parser.Tactic.location` is the syntax of specifying a hypothesis (like in `simp at h`)
+- `(..)?` means that the inner syntax is optional: either it is there or it isn't
+
+Now we can use `macro_rules` to define the tactic
+-/
+
+macro_rules
+-- not all syntax kind annotations are required here. They have been added for clarity.
+| `(tactic| simp_rw [$e:term, $[$es:term],*] $[$loc:location]?) =>
+  `(tactic| simp only [$e:term] $[$loc:location]?; simp_rw [$[$es:term],*] $[$loc:location]?)
+| `(tactic| simp_rw [$e:term] $[$loc:location]?) => `(tactic| simp only [$e:term] $[$loc:location]?)
+| `(tactic| simp_rw [] $(_loc)?) => `(tactic| skip)
+
+-- Let's test it
+example : ∀ n m : Nat, m + n + 1 - 1 = n + m := by
+  simp_rw [Nat.add_one_sub_one, Nat.add_comm, implies_true]
+
+-- or we can use `elab_rules` to loop through the array of terms directly
+
+syntax "simp_rw' " "[" term,* "]" (Parser.Tactic.location)? : tactic
+
+elab_rules : tactic
+| `(tactic| simp_rw' [$[$es:term],*] $[$loc:location]?) =>
+  for e in es do
+    let simpOnlyTactic ← `(tactic| simp only [$e:term] $[$loc:location]?)
+    evalTactic simpOnlyTactic
+
+-- Let's test it
+example : ∀ n m : Nat, m + n + 1 - 1 = n + m := by
+  simp_rw' [Nat.add_one_sub_one, Nat.add_comm, implies_true]
+
+/-
+As you can see, the syntax matching can get quite complicated. Unfortunately there is
+(as far as I, Jovan, know) no universal guide on them.
+
+Some more advance things you can do include
+-/
+
+-- ## Defining syntax
+-- we could have defined the `simp_rw` syntax like this instead:
+syntax rwRule := ("← " <|> "<- ")? term
+syntax rwRuleSeq := "[" rwRule,* "]"
+syntax "simp_rw " rwRuleSeq (location)? : tactic
+
+-- ### Defining a syntax category
+-- As a toy example, if you want to be able to write `+` and `*` backwards, you can do this:
+
+declare_syntax_cat reverse
+
+syntax reverse " + " reverse : reverse
+syntax reverse " * " reverse : reverse
+syntax "(" reverse ")" : reverse
+syntax num : reverse -- the `num` syntax category is used for number literals like `42`
+syntax "reversed[" reverse "]" : term
+
+macro_rules
+| `(reversed[$a + $b]) => `(reversed[$b] + reversed[$a])
+| `(reversed[$a * $b]) => `(reversed[$b] * reversed[$a])
+| `(reversed[($a)])    => `((reversed[$a]))
+| `(reversed[$n:num])  => `($n:num)
+
+/-
+If we now write down the term `reversed[1 + (2 * 4)]`,
+then the `macro_rules` will turn this into `(4 * 2) + 1`.
+-/
+#check (reversed[1 + (2 * 4)] : Int)
 
 /-
 ## Finishing notes
