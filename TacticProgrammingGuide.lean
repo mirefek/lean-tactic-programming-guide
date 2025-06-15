@@ -135,15 +135,15 @@ the partially filled proof term in between.
 -/
 
 theorem p_imp_p_true (p : Prop) : p → p ∧ True := by
-  -- example : p → p ∧ True := ?_
+  -- p_imp_p_true : p → p ∧ True := ?_
   intro h
-  -- example : p → p ∧ True := (fun h => ?_)
+  -- p_imp_p_true : p → p ∧ True := (fun h => ?_)
   constructor
-  -- example : p → p ∧ True := (fun h => And.intro ?left ?right)
+  -- p_imp_p_true : p → p ∧ True := (fun h => And.intro ?left ?right)
   assumption
-  -- example : p → p ∧ True := (fun h => And.intro h ?right)
+  -- p_imp_p_true : p → p ∧ True := (fun h => And.intro h ?right)
   trivial
-  -- example : p → p ∧ True := (fun h => And.intro h True.intro)
+  -- p_imp_p_true : p → p ∧ True := (fun h => And.intro h True.intro)
 
 /-
 ## (3) What are the basic data structures around Lean metaprogramming
@@ -153,7 +153,7 @@ theorem p_imp_p_true (p : Prop) : p → p ∧ True := by
 * printing: `String`, `Format`, `MessageData`
 -/
 
--- The data structure that is used to represent Lean exprssions is `Lean.Expr`.
+-- The data structure that is used to represent Lean expressions is `Lean.Expr`.
 -- Due to the nature of dependent type theory, `Lean.Expr` is used to encode types, terms and proofs.
 -- Thus, `Lean.Expr` is also what is checked by the Lean kernel when checking proofs.
 -- ctrl-click on `Lean.Expr` below to see its definition in the library.
@@ -187,7 +187,7 @@ open Lean
 
 -- Another important type in metaprogramming is `Lean.Name`
 def n1 : Name := `Nat.blah -- single backtick: arbitrary name
-def n2 : Name := ``t1e -- double backtick: resolved name (resolved in the currenct context)
+def n2 : Name := ``t1e -- double backtick: resolved name (resolved in the current context)
 
 #print n1
 #print n2
@@ -422,8 +422,8 @@ def runConstructor : TacticM Unit := do
   withMainContext do -- try to comment out this line to see what breaks
     let goal ← getMainGoal
     let ((a : Q(Prop)), (b : Q(Prop))) ← extractAndGoals1
-    let left : Q($a) ← mkFreshExprMVar a (userName := `left) -- build new metavariables
-    let right : Q($b) ← mkFreshExprMVar b (userName := `right)
+    let left : Q($a) ← mkFreshExprSyntheticOpaqueMVar a (tag := `left) -- build new metavariables
+    let right : Q($b) ← mkFreshExprSyntheticOpaqueMVar b (tag := `right)
     goal.assign q(And.intro $left $right) -- can we be brave here with `.assign`? :-)
     -- the list of active goals is not maintained automatically,
     -- we need to tell the proof state that we created two new goals
@@ -447,9 +447,9 @@ def runIntro (name : Name) : TacticM Unit :=
     let fvar : Expr := .fvar fvarId
     let body := body.instantiate1 fvar -- convert bvar to fvar
     withLCtx' lctx' do
-      -- `mkFreshExprMVar` uses the monadic context to determine the
+      -- `mkFreshExprSyntheticOpaqueMVar` uses the monadic context to determine the
       -- local context of the new metavariable
-      let newMVar ← mkFreshExprMVar body (kind := .syntheticOpaque)
+      let newMVar ← mkFreshExprSyntheticOpaqueMVar body
       let newVal ← mkLambdaFVars #[fvar] newMVar
       goal.assign newVal
       replaceMainGoal [newMVar.mvarId!]
@@ -485,11 +485,11 @@ example (a b : Prop) (ha : a) (hab : a → b) : b := by
         (.fvar eha.fvarId)
       )
       let t ← inferType e -- t = "b", e = "hab hb"
-      -- goal: ctx |- mainGoal
+      -- goal: ctx ⊢ mainGoal
       let goal2 ← goal.assert `hb t e
-      -- goal2: ctx |- t -> mainGoal
+      -- goal2: ctx ⊢ t -> mainGoal
       let (_, goal3) ← goal2.intro `hb
-      -- goal3: ctx, t |- mainGoal
+      -- goal3: ctx, t ⊢ mainGoal
       replaceMainGoal [goal3]
   exact hb
 
