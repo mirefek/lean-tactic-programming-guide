@@ -571,13 +571,13 @@ with the following example tactics.
 -/
 
 /-- Print a string as a message -/
-elab "echo " s:str : tactic => do
+elab "echo" s:str : tactic => do
   -- convert ``TSyntax `str`` to `String`
   let s : String := s.getString
   Lean.logInfo s
 
 /-- Print a square of a given natural number -/
-elab "square_nat " n:num : tactic => do
+elab "square_nat" n:num : tactic => do
   -- convert ``TSyntax `num`` to `Nat`
   let n : Nat := n.getNat
   Lean.logInfo s!"{n^2}"
