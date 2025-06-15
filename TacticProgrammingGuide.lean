@@ -391,7 +391,8 @@ and extracts the two type expressions `A` and `B`.
 -/
 def extractAndGoals1 : TacticM (Expr × Expr) := do
   let tgt ← getMainTarget -- equivalent to `(← getGoal).getType`
-  have quotedTgt : Q(Prop) := tgt -- add a `Q(...)` annotation to `tgt`
+   -- add a `Q(...)` annotation to `tgt`, !! must use `have`, not `let` for it
+  have quotedTgt : Q(Prop) := tgt
   match quotedTgt with
   | ~q($p ∧ $q) => -- Qq match, must run in MetaM or higher
     return (p, q)
