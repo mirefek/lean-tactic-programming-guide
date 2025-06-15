@@ -605,7 +605,7 @@ elab "square_float" n:scientific : tactic => do
 /-- Display a type of a given term -/
 elab "my_check" e:term : tactic => do
   withMainContext do -- term parsing can depend on the context
-    -- convert ``TSyntax `term`` to `Expr`, whithout a given expected type
+    -- convert ``TSyntax `term`` to `Expr`, without a given expected type
     let e : Expr ← elabTerm e none
     -- Note that there are many analogous `Lean.Elab.Tactic.elab*`
     -- such as `elabTermEnsuringType`, `elabTermWithHoles`...
