@@ -386,7 +386,7 @@ One way is to use the following function
 #check mkFreshExprSyntheticOpaqueMVar
 /-
 although if you Ctrl-click on it, you find that it just
-calls mkFreshExprMVar with a specific kind.
+calls `mkFreshExprMVar` with a specific kind.
 -/
 
 /-
@@ -566,7 +566,7 @@ Also, the `` `(tactic| `` notation as shown earlier is best kept without spaces.
 
 /-- Our variant of `intro`. -/
 elab "my_intro" a:ident : tactic => do
-  -- `a` has type ``TSyntax `ident``. This is the syntax category for identifiers
+  -- `a` has type ``TSyntax `ident``. This is the syntax kind for identifiers
   let aName : Name := a.getId
   runIntro aName
 
