@@ -128,7 +128,7 @@ Of course, this is not exhaustive. Advanced topics include
 On the core level, a proof is a term, a so called "proof term" that testifies the truth
 of the given proposition. When we are proving a theorem, at every moment, we have
 a partially built proof term with holes, so called metavariables.
-Most tactic steps fill one hole (formally assigns one metavariable) with a subterm,
+Most tactic steps fill one hole (formally assign one metavariable) with a subterm,
 possibly containing further metavariables.
 
 The proof is finished once all metavariables are assigned,
