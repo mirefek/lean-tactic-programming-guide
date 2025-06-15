@@ -373,7 +373,7 @@ A new metavariable is created using
 #check mkFreshExprMVar
 /-
 However a good practice is to make the goal variables "syntheticOpaque" - then Lean
-knows that they are somewhat important, and doesn't unify them willy-nilly.
+knows that they are somewhat important, and doesn't assign them willy-nilly.
 
 One way is to use the following function
 -/
