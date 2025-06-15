@@ -404,6 +404,11 @@ def extractAndGoals2 : TacticM (Expr × Expr) := do
   let (`And, #[p, q]) := tgt.getAppFnArgs
     | throwError "Goal {tgt} is not of the form (?_ ∧ ?_)"
   return (p, q)
+-- Note that the non-Qq version requires the term to be more "exactly matching".
+-- Before matching, you might want to call the following two functions
+#check instantiateMVars
+#check whnf
+-- however digging deeper into them exceeds the scope of this tutorial.
 
 -- let's check that our decomposition of "And" works.
 example (p q : Prop) (h : p ∧ q) : p ∧ q := by
@@ -505,14 +510,22 @@ of `Lean.Syntax`, as it is quite messy.
 #check Lean.TSyntax
 /--
 Just like `Q(...)` is an annotated version of `Expr`, `TSyntax ..` is an annotated version
-of `Syntax`. The most common annotations are ``TSyntax `tactic`` and ``TSyntax `term``.
+of `Syntax`. Syntactic annotations (so called categories) are different from term types,
+they don't care as much about "what" we are writing but only "how" we are writing it.
+
+The most common annotations are ``TSyntax `term`` and ``TSyntax `tactic``. They both
+output an expression in the end but the former parses it explicitly whereas the latter
+builds the expression by "running programs". Other examples (not important here) include
+top-level commands (`def`, `#eval`, ...), or the "do notation" syntax.
+
 We can construct `Syntax` using quotations like `` `(kind| syntax)``. This only works
-in a monad like `MetaM`.
+in a monad similar to `MetaM` (above `CoreM` to be precise).
 -/
 def s1 : MetaM (TSyntax `tactic) := `(tactic| apply And.intro)
 def s2 : MetaM (TSyntax `term) := `(1+2+3) -- equivalent to `(term| 1+2+3)
 
 -- As you can see, the produced `Syntax` is quite messy
+-- but you could find all the data somewhere inside
 #eval s1
 #eval s2
 
@@ -523,7 +536,7 @@ syntax, and these rules are used when the syntax is being elaborated.
 
 /-- `my_constructor` is a version of `constructor` that only applies to `And` goals -/
 macro "my_constructor" : tactic => `(tactic| apply And.intro)
-/- Doc-string for `my_trivial` -/
+/-- `my_trivial` solves goal `True` -/
 macro "my_trivial" : tactic => `(tactic| exact True.intro)
 
 -- note that by hovering you can see the doc-strings of the macros
@@ -531,7 +544,12 @@ example (p : Prop) : p → p ∧ True := by
   intro h; my_constructor; assumption; my_trivial
 
 /-
-We can also write elaborators for our version of `intro` and `assumption`
+For `intro` and `assumption`, we show how to assign the monadic programs
+to the appropriate syntax using the `elab` command.
+
+Be aware that the syntax-defining syntax is quite sensitive to whitespace characters.
+In the following example, you cannot put a space between `a` and `:`.
+Also, the `` `(tactic| `` notation as shown earlier is better to keep without spaces.
 -/
 
 /-- Our variant of `intro`. -/
@@ -548,8 +566,59 @@ example (p : Prop) : p → p ∧ True := by
   my_intro h; my_constructor; my_assumption; my_trivial
 
 /-
+Let us show how to extract more kinds of arguments from Syntax
+with the following example tactics.
+-/
+
+/-- Print a string as a message -/
+elab "echo " s:str : tactic => do
+  -- convert ``TSyntax `str`` to `String`
+  let s : String := s.getString
+  Lean.logInfo s
+
+/-- Print a square of a given natural number -/
+elab "square_nat " n:num : tactic => do
+  -- convert ``TSyntax `num`` to `Nat`
+  let n : Nat := n.getNat
+  Lean.logInfo s!"{n^2}"
+
+/-- Print a square of a given non-negative decimal number -/
+elab "square_float" n:scientific : tactic => do
+  let (m,s,e) := n.getScientific
+  let q : Rat := Rat.ofScientific m s e
+  let f : Float := Float.ofScientific m s e
+  Lean.logInfo s!"Rat: {q*q}, Float: {f^2}"
+-- Note: negative numbers are not supported as native syntax.
+-- The minus becomes a part of Lean's term.
+
+/-- Display a type of a given term -/
+elab "my_check" e:term : tactic => do
+  withMainContext do -- term parsing can depend on the context
+    -- convert ``TSyntax `term`` to `Expr`
+    let e : Expr ← elabTerm e none
+    -- Note that there are many analogous `Lean.Elab.Tactic.elab*`
+    -- such as `elabTermEnsuringType`, `elabTermWithHoles`...
+    let t ← inferType e
+    Lean.logInfo m!"{e} : {t}"
+
+example (n : Nat) : True := by
+  echo "Hello world!"
+  square_nat 5
+  square_float 0.5
+  my_check n+5
+  trivial
+
+elab "my_have" n:ident ":=" e:term : tactic => do
+  throwError "Not implemented, left as an exercise"
+
+example (x y : Prop) (hx : x) (hxy : x → y) : y := by
+  my_have hy := hxy hx
+  exact hy
+
+/-
 The `macro` and `elab` commands are nice, but for more complicated syntax, you may need
-a bit more flexibility. This can be achieved by separately defining the syntax with a
+a bit more flexibility - to separate syntax declaration from its semantic meaning.
+This can be achieved by separately defining the syntax with a
 `syntax` command, and defining what the syntax does using `macro_rules` or `elab_rules`.
 For example, the above tactics can be defined as follows:
 -/
@@ -586,16 +655,16 @@ In the syntax `term,*`
 - `,` signifies that it is a comma-separated list. Omitting the `,` gives a space separated list.
 In the syntax `(Parser.Tactic.location)?`
 - `Parser.Tactic.location` is the syntax of specifying a hypothesis (like in `simp at h`)
-- `(..)?` means that the inner syntax is optional: either it is there or it isn't
+- `(...)?` means that the inner syntax is optional: either it is there or it isn't
 
 Now we can use `macro_rules` to define the tactic
 -/
 
 macro_rules
 /-
- to match optional syntax, or a list of syntax, we use the `$[$...]` anti-quotation.
-- $[$...]? matches optional syntax
-- $[$...],* matches a possibly empty comma-separated list of syntax
+ to match optional syntax, or a list of syntax, we use the `$[...]` anti-quotation.
+- `$[...]?` matches optional syntax
+- `$[...],*` matches a possibly empty comma-separated list of syntax
 not all syntax kind annotations are required here. They have been added for clarity.
 -/
 | `(tactic| my_simp_rw [$e:term, $[$es:term],*] $[$loc:location]?) =>
@@ -664,7 +733,7 @@ There is much more to say,
 You can check out a more advanced Lean Metaprogramming book
 https://leanprover-community.github.io/lean4-metaprogramming-book/
 Another nice resource of what could be a problem when you get stuck
-on a mysterious metaprogramming problem:
+on a mysterious metaprogramming bug:
 https://github.com/leanprover-community/mathlib4/wiki/Metaprogramming-gotchas
 
 But also, just be curious - ctrl-click on the functions we are using
@@ -677,3 +746,4 @@ what other monad it extends, if any.
 These states can be a bit scary but all the information Lean
 has to its disposal must be somewhere in them...
 -/
+end MetaProgrammingTutorial
