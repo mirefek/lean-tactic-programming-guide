@@ -523,13 +523,13 @@ of `Lean.Syntax`, as it is quite messy.
 Just like `Q(...)` is an annotated version of `Expr`, `TSyntax ..` is an annotated version
 of `Syntax`. However, syntax annotations (so called syntax categories) are just a `Name`.
 The most common ones are
-- ``TSyntax `term``, which represents a lean expression (of any type)
-- ``TSyntax `tactic``, which represents a tactic
-- ``TSyntax `num``, which represents a natural number literal
-- ``TSyntax `ident``, which represents a name/identifier literal
+- `term`, which represents a lean expression (of any type)
+- `tactic`, which represents a tactic
+- `num`, which represents a natural number literal
+- `ident`, which represents a name/identifier literal
 Other less important examples of syntax categories include
-- ``TSyntax `command``, which represents a top-level command (e.g. `def ..` or `#eval ..`)
-- ``TSyntax `doElem``, which represent a command in "do notation"
+- `command`, which represents a top-level command (e.g. `def ..` or `#eval ..`)
+- `doElem`, which represent a command in "do notation"
 
 We can construct `Syntax` using quotations like `` `(kind| syntax)``. This only works
 in a monad similar to `MetaM` (above `CoreM` to be precise).
