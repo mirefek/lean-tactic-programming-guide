@@ -674,7 +674,7 @@ macro_rules
 /-
 To match optional syntax, or a list of syntax, we use the `$[...]` anti-quotation.
 - `$[...]?` matches optional syntax
-- `$[...],*` matches a nonempty comma-separated list of syntax
+- `$[...],*` matches a possibly empty comma-separated list of syntax
 Square brackets without a dollar represent explicit `[` and `]` symbols in the syntax.
 Not all syntax kind annotations are required here. They have been added for clarity.
 -/
