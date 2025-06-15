@@ -442,6 +442,10 @@ example (p : Prop) : p → p ∧ True := by
   run_tac runAssumption
   run_tac runTrivial
 
+/-
+Implementation of intro has the most hidden intricacies. Do not worry
+too much if you don't fully understand it.
+-/
 def runIntro (name : Name) : TacticM Unit :=
   withMainContext do
     let goal ← getMainGoal
