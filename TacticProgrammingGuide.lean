@@ -159,7 +159,7 @@ theorem p_imp_p_true (p : Prop) : p → p ∧ True := by
 -- ctrl-click on `Lean.Expr` below to see its definition in the library.
 #check Lean.Expr
 
--- Lean has a handy library Qq to help you build `Lean.Expr` terms with a convenient notation.
+-- Lean has a handy library `Qq` to help you build `Lean.Expr` terms with a convenient notation.
 open Qq
 
 -- `Q(...)` is a type annotation of an expression, and
@@ -735,6 +735,8 @@ https://leanprover-community.github.io/lean4-metaprogramming-book/
 Another nice resource of what could be a problem when you get stuck
 on a mysterious metaprogramming bug:
 https://github.com/leanprover-community/mathlib4/wiki/Metaprogramming-gotchas
+You can also learn more about Qq on its own github
+https://github.com/leanprover-community/quote4
 
 But also, just be curious - ctrl-click on the functions we are using
 to see what they are doing.
