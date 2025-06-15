@@ -521,8 +521,8 @@ of `Lean.Syntax`, as it is quite messy.
 #check Lean.TSyntax
 /--
 Just like `Q(...)` is an annotated version of `Expr`, `TSyntax ..` is an annotated version
-of `Syntax`. However, syntax annotations (so called syntax categories) are usually just a
-`Name`. The most common ones are
+of `Syntax`. However, syntax annotations (so called syntax categories) are just a `Name`.
+The most common ones are
 - ``TSyntax `term``, which represents a lean expression (of any type)
 - ``TSyntax `tactic``, which represents a tactic
 - ``TSyntax `num``, which represents a natural number literal
