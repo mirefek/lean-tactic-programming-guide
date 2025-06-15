@@ -397,7 +397,7 @@ and extracts the two type expressions `A` and `B`.
 -/
 def extractAndGoals1 : TacticM (Expr × Expr) := do
   let tgt ← getMainTarget -- equivalent to `(← getGoal).getType`
-   -- add a `Q(...)` annotation to `tgt`, !! must use `have`, not `let` for it
+   -- add a `Q(...)` annotation to `tgt`, !! must use `have`, not `let`
   have quotedTgt : Q(Prop) := tgt
   match quotedTgt with
   | ~q($p ∧ $q) => -- Qq match, must run in MetaM or higher
@@ -449,7 +449,7 @@ example (p : Prop) : p → p ∧ True := by
   run_tac runTrivial
 
 /-
-Implementation of intro has the most hidden intricacies. Do not worry
+The implementation of intro has the most hidden intricacies. Do not worry
 too much if you don't fully understand it.
 -/
 def runIntro (name : Name) : TacticM Unit :=
@@ -521,13 +521,15 @@ of `Lean.Syntax`, as it is quite messy.
 #check Lean.TSyntax
 /--
 Just like `Q(...)` is an annotated version of `Expr`, `TSyntax ..` is an annotated version
-of `Syntax`. Syntactic annotations (so called categories) are different from term types,
-they don't care as much about "what" we are writing but only "how" we are writing it.
-
-The most common annotations are ``TSyntax `term`` and ``TSyntax `tactic``. They both
-output an expression in the end but the former parses it explicitly whereas the latter
-builds the expression by "running programs". Other examples (not important here) include
-top-level commands (`def`, `#eval`, ...), or the "do notation" syntax.
+of `Syntax`. However, syntax annotations (so called syntax categories) are usually just a
+`Name`. The most common ones are
+- ``TSyntax `term``, which represents a lean expression (of any type)
+- ``TSyntax `tactic``, which represents a tactic
+- ``TSyntax `num``, which represents a natural number literal
+- ``TSyntax `ident``, which represents a name/identifier literal
+Other less important examples of syntax categories include
+- ``TSyntax `command``, which represents a top-level command (e.g. `def ..` or `#eval ..`)
+- ``TSyntax `doElem``, which represent a command in "do notation"
 
 We can construct `Syntax` using quotations like `` `(kind| syntax)``. This only works
 in a monad similar to `MetaM` (above `CoreM` to be precise).
@@ -535,8 +537,7 @@ in a monad similar to `MetaM` (above `CoreM` to be precise).
 def s1 : MetaM (TSyntax `tactic) := `(tactic| apply And.intro)
 def s2 : MetaM (TSyntax `term) := `(1+2+3) -- equivalent to `(term| 1+2+3)
 
--- As you can see, the produced `Syntax` is quite messy
--- but you could find all the data somewhere inside
+-- As you can see, the produced `Syntax` is quite messy; but all the data is somewhere inside
 #eval s1
 #eval s2
 
@@ -560,7 +561,7 @@ to the appropriate syntax using the `elab` command.
 
 Be aware that the syntax-defining syntax is quite sensitive to whitespace characters.
 In the following example, you cannot put a space between `a` and `:`.
-Also, the `` `(tactic| `` notation as shown earlier is better to keep without spaces.
+Also, the `` `(tactic| `` notation as shown earlier is best kept without spaces.
 -/
 
 /-- Our variant of `intro`. -/
@@ -600,12 +601,11 @@ elab "square_float" n:scientific : tactic => do
   let f : Float := Float.ofScientific m s e
   Lean.logInfo s!"Rat: {q*q}, Float: {f^2}"
 -- Note: negative numbers are not supported as native syntax.
--- The minus becomes a part of Lean's term.
 
 /-- Display a type of a given term -/
 elab "my_check" e:term : tactic => do
   withMainContext do -- term parsing can depend on the context
-    -- convert ``TSyntax `term`` to `Expr`
+    -- convert ``TSyntax `term`` to `Expr`, whithout a given expected type
     let e : Expr ← elabTerm e none
     -- Note that there are many analogous `Lean.Elab.Tactic.elab*`
     -- such as `elabTermEnsuringType`, `elabTermWithHoles`...
@@ -628,10 +628,9 @@ example (x y : Prop) (hx : x) (hxy : x → y) : y := by
 
 /-
 The `macro` and `elab` commands are nice, but for more complicated syntax, you may need
-a bit more flexibility - to separate syntax declaration from its semantic meaning.
-This can be achieved by separately defining the syntax with a
-`syntax` command, and defining what the syntax does using `macro_rules` or `elab_rules`.
-For example, the above tactics can be defined as follows:
+a bit more flexibility. This can be achieved by first defining the syntax with a
+`syntax` command, and then defining the meaning of that syntax with a `macro_rules` or
+`elab_rules` command. For example, the above tactics can be defined as follows:
 -/
 
 /-- Doc-string for `my_constructor'`. -/
@@ -675,8 +674,8 @@ macro_rules
 /-
 To match optional syntax, or a list of syntax, we use the `$[...]` anti-quotation.
 - `$[...]?` matches optional syntax
-- `$[...],*` matches a possibly empty comma-separated list of syntax
-Square brackets without a dollar represent explicit symbols in the syntax.
+- `$[...],*` matches a nonempty comma-separated list of syntax
+Square brackets without a dollar represent explicit `[` and `]` symbols in the syntax.
 Not all syntax kind annotations are required here. They have been added for clarity.
 -/
 | `(tactic| my_simp_rw [$e:term, $[$es:term],*] $[$loc:location]?) =>
@@ -704,7 +703,7 @@ example : ∀ n m : Nat, m + n + 1 - 1 = n + m := by
 
 /-
 As you can see, the syntax matching can get quite complicated. Unfortunately there is
-(as far as I, Jovan, know) no universal guide on them.
+no universal guide on these intricacies
 
 Some more advance things you can do include
 -/
@@ -718,13 +717,13 @@ syntax "my_simp_rw " rwRuleSeq (location)? : tactic
 -- ### Defining a syntax category
 -- As a toy example, if you want to be able to write terms in natural language
 
-declare_syntax_cat reverse
+declare_syntax_cat my_syntax_cat
 
-syntax reverse " plus " reverse : reverse
-syntax reverse " times " reverse : reverse
-syntax "(" reverse ")" : reverse
-syntax num : reverse -- the `num` syntax category is used for number literals like `42`
-syntax "language[" reverse "]" : term
+syntax my_syntax_cat " plus " my_syntax_cat : my_syntax_cat
+syntax my_syntax_cat " times " my_syntax_cat : my_syntax_cat
+syntax "(" my_syntax_cat ")" : my_syntax_cat
+syntax num : my_syntax_cat -- the `num` syntax category is used for number literals like `42`
+syntax "language[" my_syntax_cat "]" : term
 
 macro_rules
 | `(language[$a plus $b]) => `(language[$a] + language[$b])
