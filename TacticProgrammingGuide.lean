@@ -93,7 +93,7 @@ def myCode3 : Lean.Elab.Tactic.TacticM (Array Nat) := do
   for i in [:5] do -- `[:5]` or `[0:5]` loops through `0,1,2,3,4` using `Std.Range`
     let res ← myCode1 i -- we use "←" to retrieve a value from a monad execution
     a := a.push res -- an assignment without "let" is only allowed for mutable variables
-    -- Note: since we immediately replace a with (a.push i),
+    -- Note: since we immediately replace `a` with `a.push res`,
     --   Lean's inner optimization will avoid duplicating the array
     -- Note for imperative programmers:
     --   `a.push res` alone cannot work, an external function cannot change the value of "a".
