@@ -16,7 +16,7 @@ Lean metaprogramming is about, and be able to write some simple tactics.
 
 # Beginner's Guide to Lean Tactic Programming
 
-Tactics are in principle arbitrary programs that opearate on the proof state.
+Tactics are in principle arbitrary programs that operate on the proof state.
 We can write such programs in-place in the tactic proof, such as in the following example.
 
 This example tactic doesn't do anything except logging "Hello world".
@@ -63,7 +63,7 @@ In the following example, we show two monads.
   can call a `MetaM` but not the other way around (we would have to provide the
   `TacticM` all the extra data it needs)
 
-We will now demostrate imperative programming in Lean with some examples. So far,
+We will now demonstrate imperative programming in Lean with some examples. So far,
 we are not using any API to access the proofstate, only showcasing
 Lean as an imperative programming language.
 -/
@@ -93,7 +93,7 @@ def myCode3 : Lean.Elab.Tactic.TacticM (Array Nat) := do
   for i in [:5] do -- `[:5]` or `[0:5]` loops through `0,1,2,3,4` using `Std.Range`
     let res ← myCode1 i -- we use "←" to retrieve a value from a monad execution
     a := a.push res -- an assignment without "let" is only allowed for mutable variables
-    -- Note: since we immediatelly replace a with (a.push i),
+    -- Note: since we immediately replace a with (a.push i),
     --   Lean's inner optimization will avoid duplicating the array
     -- Note for imperative programmers:
     --   `a.push res` alone cannot work, an external function cannot change the value of "a".
@@ -255,7 +255,7 @@ open Lean Meta Elab.Tactic Qq
 
 -- The easiest tactic to replace is "trivial"
 def runTrivial0 : TacticM Unit := do
-  -- we retrieve the metavariable represesnting the current goal
+  -- we retrieve the metavariable representing the current goal
   let goal : MVarId ← getMainGoal
   -- and assign it to be True.intro
   goal.assign q(True.intro) -- !!! first attempt, not ideal
@@ -287,7 +287,7 @@ and not a proof of `True`.
 
 Such errors are hard to decode, so it is better to ensure that we only
 assign a metavariable if the assignment has the correct type.
-Fortunatelly, Batteries has a function that checks if something can be assigned.
+Fortunately, Batteries has a function that checks if something can be assigned.
 ctrl+click on it to see the implementation.
 -/
 #check MVarId.assignIfDefEq
@@ -705,10 +705,10 @@ example : ∀ n m : Nat, m + n + 1 - 1 = n + m := by
 As you can see, the syntax matching can get quite complicated. Unfortunately there is
 no universal guide on these intricacies
 
-Some more advance things you can do include
+Here are some more advanced things you can do:
 -/
 
--- ## Defining syntax
+-- ### Defining syntax
 -- we could have defined the `my_simp_rw` syntax like this instead:
 syntax rwRule := ("← " <|> "<- ")? term
 syntax rwRuleSeq := "[" rwRule,* "]"
