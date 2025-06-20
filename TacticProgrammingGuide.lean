@@ -294,7 +294,7 @@ ctrl+click on it to see the implementation.
 
 -- version throwing an error if the goal isn't `True`
 def runTrivial1 : TacticM Unit := do
-  -- we retrieve the metavariable represesnting the current goal
+  -- we retrieve the metavariable representing the current goal
   let goal : MVarId ← getMainGoal
   -- and assign it to be True.intro
   goal.assignIfDefEq q(True.intro)
@@ -313,7 +313,7 @@ We can catch errors using a `try ... catch _ => ...` block.
 And we can throw errors using `throwError`.
 -/
 def runTrivial : TacticM Unit := do
-  -- we retrieve the metavariable represesnting the current goal
+  -- we retrieve the metavariable representing the current goal
   let goal : MVarId ← getMainGoal
   -- and assign it to be True.intro
   try
