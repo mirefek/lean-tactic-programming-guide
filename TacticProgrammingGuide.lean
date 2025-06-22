@@ -251,7 +251,7 @@ A lot of the functions / types are hidden in namespaces
 so let's open them
 -/
 
-open Lean Meta Elab.Tactic Qq
+open Meta Elab.Tactic
 
 -- The easiest tactic to replace is "trivial"
 def runTrivial0 : TacticM Unit := do
