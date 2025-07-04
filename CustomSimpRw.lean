@@ -425,20 +425,32 @@ def simpBase (rules : List Expr) (u : Level) (α : Q(Sort u)) (a : Q($α)) :
   | some result => result
   | none => SimpResult.rfl a
 
+#check Qq.isDefEqQ
+
+#check congr
+
 partial -- simplification could repeat indefinitely, `partial` skips termination check
 def simpRec (base : (u : Level) → (α : Q(Sort u)) → (a : Q($α)) →  MetaM (SimpResult a))
   {u : Level} {α : Q(Sort u)} (a : Q($α)) : MetaM (SimpResult a) := do
+  let an ← whnf a
+  let ⟨u, α, an⟩ ← inferTypeQ an
+  let (b, pf) : (Expr × Expr) := match an with
+  | .app f arg =>
+    sorry
+  | .forallE name bi _ _ =>
+    sorry
+  | _ => let ⟨b, pf⟩ := SimpResult.rfl an; (b, pf)
   -- Qq-matching doesn't work for highly abstract terms
   -- TODO: whnf & match on
   -- (f a)
   -- (a → b)
   -- ∀ x, p x
-  throwError "not finished"
   -- TODO: simplify children
   -- let prev : SimpResult := none.
   -- match base e with
   -- | none => prev
   -- | some res =>
+  throwError "not finished"
 
 /-
 # (4) Unification - rewriting a quantified equality.
