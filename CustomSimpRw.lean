@@ -10,11 +10,12 @@ open Qq
 
 Content
 (1) What simp & rw do on proof term level, and what is the difference?
-(2) Implementing `rw` using bare expressions.
-(3) Implementing `simp` using Qq.
-(4) Unification - rewriting a quantified equality.
-(5) Collecting tagged lemmas
-(6) Simplification procedures - building upon existing simp infrastructure
+(2) Implementing `rw`.
+(3) Filling implicit arguments.
+(4) Implementing `simp`.
+(5) Unification - rewriting a quantified equality.
+(6) Collecting tagged lemmas
+(7) Simplification procedures - building upon existing simp infrastructure
 
 Leave for another file
 * Options for `whnf`
@@ -165,7 +166,7 @@ theorem simp_example2 (a b : Nat) (p : Nat → Nat → Prop)
 #check forall_congr
 
 /-
-# (2) Implementing `rw` using bare expressions.
+# (2) Implementing `rw`.
 
 ## Abstracting a variable
 
@@ -304,101 +305,154 @@ example (a b : Nat) (h : a = b) : 2*a + b = 2*b + a := by
   rfl
 
 /-
-# (3) Implement `simp` using Qq
+# (3) Filling implicit arguments.
 
-For simp, we will utilize Qq to both showcase it, and to get some type safety.
-For start, we will not expect `simp` to automatically search for / apply theorems,
-we only provide it a finite list of fixed equalities it can use.
+To implement `simp`, we will need to call common theorems to combine partial proofs.
+Let us look at the example of transitivity.
+-/
+example (a b c : Nat) (pf1 : a = b) (pf2 : b = c) : True := by
+  -- we would like to emulate calling something like
+  have pf3 := Eq.trans pf1 pf2
+  -- but the full expression we want to build is
+  have pf3' := @Eq.trans.{1} Nat a b c pf1 pf2
+  -- on tactic level, we have several ways to construct it
+  run_tacq
+    -- (a) low-level constructing the term, we have to provide all the arguments
+    let lowlev := mkApp6 ((mkConst ``Eq.trans [1])) (mkConst ``Nat) a b c pf1 pf2
+    logInfo m!"lowlev = {lowlev}"
+    -- (b) using `Qq`
+    let pfQ := q(Eq.trans $pf1 $pf2)
+    logInfo m!"pfq = {pfQ}"
+    -- (c) using `mkAppM`
+    let pfAppM ← mkAppM ``Eq.trans #[pf1, pf2]
+    logInfo m!"pfAppM = {pfAppM}"
+    -- (d) using `mkEqTrans` -- common functions already have their meta-versions
+    let pfEqT ← mkEqTrans pf1 pf2
+    logInfo m!"pfEqT = {pfEqT}"
+  trivial
 
-We are not aiming at efficiency. Contrary to the standard `simp`
-which skips proving reflexivity, we will prove reflexivity at the atomic terms,
-and will propagate it upwards (just for for coding convenience).
+/-
+The crucial difference between `Qq` and `mkAppM` is that `Qq` does the type inference
+in compile-time whereas `mkAppM` does it in runtime. Let us implement both as functions.
+-/
+
+def buildTransQ {u : Level} {α : Q(Sort u)} {a b c : Q($α)}
+    (pf1 : Q($a = $b)) (pf2 : Q($b = $c)) : Q($a = $c) :=
+  q(Eq.trans $pf1 $pf2)
+
+def buildTransM (pf1 pf2 : Expr) : MetaM Expr :=
+  mkAppM ``Eq.trans #[pf1, pf2]
+
+/-
+Notice that `buildTransM` needs to run in MetaM -- only that way it will have enough
+data to correctly infer the types of the given expressions, and hence the correct
+implicit arguments.
+
+On the other hand, `buildTransQ` doesn't need MetaM. It needs to get all the data
+that makes `pf1` and `pf2` correctly annotated: `u α a b c`.
+Even if these arguments are passed implicitly (so the meta-programmer doesn't
+have to write them), they are indeed passed, and play a crucial role in runtime
+to build the resulting term.
+
+Here, we will use `mkAppM` to finish the implementation of `simp`.
+Using `Qq` would require taking care of the annotations which can become
+a bit finicky (doable but perhaps not as well suited for a tutorial).
+On the other hand, we encourage you to try building terms with `Qq` too,
+and see what suits your needs better.
+-/
+
+/-
+# (4) Implementing `simp`
+
+## SimpResult
 
 First, we define a structure capturing the result.
+
+The output of a simplification run on `a` is a new expression `res`
+of the same type, and a proof `pf : a = res`. Sometimes, `simp` doesn't
+perform any simplification, in that case, we allow `pf` to be `none`
+(although we could also close it using `rfl`)
 -/
-/--
-The output of a simplification run on `a` of type `α : Sort u`
-is a proof `pf : a = b`. We need to store all of its typing
-information also to be able to specify its Qq-type.
--/
-structure SimpResult {u : Level} {α : Q(Sort u)} (a : Q($α)) where
-  b : Q($α)
-  pf : Q($a = $b)
+structure SimpResult where
+  res : Expr
+  pf? : Option Expr
 
 -- Note that the library Simp also has a similar Result structure, both
 -- in basic library, and with Qq hints, we will not use that for now
 #check Simp.Result
 #check Simp.ResultQ
 
-/-
-Now, we prepare infrastructure for composing `SimpResult`s together.
--/
+-- let's prepare some ways to combine results together
 
-#check rfl
-/-- Builds a result for no rewrite -/
-def SimpResult.rfl {u : Level} {α : Q(Sort u)} (a : Q($α)) : SimpResult a := ⟨a, q(rfl)⟩
-
-def SimpResult.isRfl {u : Level} {α : Q(Sort u)} {a : Q($α)} (r : SimpResult a) :=
-  r.pf.isAppOfArity ``rfl 2
+#check Eq.refl
+/-- Gets the proof, possibly building `rfl` if it was none. -/
+def SimpResult.getProof (r : SimpResult) : MetaM Expr :=
+  match r.pf? with
+  | some pf => pure pf
+  | none => mkAppM ``Eq.refl #[r.res]
+-- see also `mkEqRefl`
 
 #check Eq.trans
-/-- runs `Eq.trans` on `SimpResult`s -/
-def SimpResult.trans {u : Level} {α : Q(Sort u)} {a : Q($α)}
-    (r1 : SimpResult a) (r2 : SimpResult r1.b) : SimpResult a :=
-  let ⟨_,pf1⟩ := r1
-  let ⟨b2,pf2⟩ := r2
-  ⟨b2, q(Eq.trans $pf1 $pf2)⟩
-
--- TODO: explain filling implicit variables
--- TODO: tell about mkAppM
-
--- TODO: explain there is a lot of work behind writing this
+/-- Combines two `SimpResults` using `Eq.trans` -/
+def SimpResult.trans (r1 r2 : SimpResult) : MetaM SimpResult := do
+  match r1.pf? with
+  | none => return r2
+  | some pf1 => match r2.pf? with
+    | none => return {res := r2.res, pf? := some pf1}
+    | some pf2 =>
+      let pf ← mkAppM ``Eq.trans #[pf1, pf2]
+      return {res := r2.res, pf? := some pf}
 
 #check congr
-/-- runs `congr` on `SimpResult`s -/
-def SimpResult.app {u v : Level} {α : Q(Sort u)} {β : Q(Sort v)}
-    {af : Q($α → $β)} {aArg : Q($α)}
-    (rf : @SimpResult _ q($α → $β) af) (rArg : SimpResult aArg) :
-    SimpResult q($af $aArg) :=
-  let ⟨bf, pff⟩ := rf
-  let ⟨bArg, pfArg⟩ := rArg
-  ⟨q($bf $bArg), q(@congr $α $β $af $bf $aArg $bArg $pff $pfArg)⟩
+#check congrArg
+#check congrFun
+/-- Combines `f = g`, and `a = b` into `f a = g b` using `congr` -/
+def SimpResult.app (rf rArg : SimpResult) : MetaM SimpResult := do
+  let res := mkApp rf.res rArg.res
+  match rf.pf? with
+  | none => match rArg.pf? with
+    | none => return {res := res, pf? := none}
+    | some pfArg => return {res := res, pf? := ← mkAppM ``congrArg #[rf.res, pfArg]}
+  | some pff => match rArg.pf? with
+    | none => return {res := res, pf? := ← mkAppM ``congrFun #[pff, rArg.res]}
+    | some pfArg => return {res := res, pf? := ← mkAppM ``congr #[pff, pfArg]}
+-- see also `mkCongr`, `mkCongrArg`, `mkCongrFun`
 
 #check implies_congr
-/-- runs `implies_congr` on `SimpResult`s -/
-def SimpResult.impl {u v : Level} {a1 : Q(Sort u)} {a2 : Q(Sort v)}
-    (r1 : @SimpResult _ q(Sort u) a1) (r2 : @SimpResult _ q(Sort v) a2) :
-    SimpResult (q($a1 → $a2)) :=
-  let ⟨b1, pf1⟩ := r1
-  let ⟨b2, pf2⟩ := r2
-  ⟨q($b1 → $b2), q(implies_congr $pf1 $pf2)⟩
+/-- from `a = b`, `c = d` proves `a → c = b → d` using `implies_congr` on `SimpResult`s -/
+def SimpResult.impl (r1 r2 : SimpResult) : MetaM SimpResult := do
+  let res := mkForall Name.anonymous BinderInfo.default r1.res r2.res
+  if r1.pf?.isNone && r2.pf?.isNone then return {res := res, pf? := none}
+  return {res := res, pf? := some <|
+    ← mkAppM ``implies_congr #[← r1.getProof, ← r2.getProof]
+  }
+-- see also `mkImpCongr`
 
--- TODO: Notice we are sometimes in bare Expr
-
-#print forall_congr
 #check forall_congr
-def SimpResult.forall {u : Level} {α : Q(Sort u)}
-    (p q : Q($α → Prop)) (fv : Q($α)) (h : Q($p $fv = $q $fv))
-    (name : Name) (bi : BinderInfo) :
-    Q((∀ x, $p x) = (∀ x, $q x)) :=
-  have h : Q(∀ x, $p x = $q x) :=
-    mkLambda name bi α (h.abstract #[fv])
-  let res : Q((∀ x, $p x) = (∀ x, $q x)) :=
-    q(forall_congr $h)
-  -- we don't want to see the explicit applications `p a`, `p b`,
-  -- so we use `mkExpectedPropHint` to change the output type
-  -- to something definitionally equal.
-  have lhs : Q(Prop) := mkForall name bi α p.bindingBody!
-  have rhs : Q(Prop) := mkForall name bi α q.bindingBody!
-  mkExpectedPropHint res q($lhs = $rhs)
+/--
+Gets a proof of `p fv = q fv` where `fv` is a free variable, and `p fv` is a `Prop`.
+and builds a proof of `(∀ x, p x) = (∀ x, q x)` using forall_congr.
+-/
+def SimpResult.forall (fv : Expr) (r : SimpResult) :
+    MetaM SimpResult := do
+  let res ← mkForallFVars #[fv] r.res -- bind fv into forall
+  match r.pf? with
+  | none => return {res := res, pf? := none}
+  | some pf =>
+    let pf ← mkLambdaFVars #[fv] pf -- bind fv into lambda, `pf : ∀ x, p x = q x`
+    let pf ← mkAppM ``forall_congr #[pf] -- `pf : (∀ x, p x) = (∀ x, q x)`
+    return {res := res, pf? := some pf}
+-- see also `mkForallCongr`
 
 /-
-TODO: explain better simpRec & simpBase
+## Main functions `SimpRec` & `SimpBase`
+
+  TODO: explain better simpRec & simpBase, and fix the code below to the current
+  non-Qq `SimpResult` implementation (get rid of Qq usage).
 
 To make it modular, we have
 * function `simpBase (...) a` that only tries to make a single rewrite step
-  of the root of `a` to `b` and build a proof of `a = b`. If the root doesn't,
-  simpllify, it just leaves `b` as `a`, and closes the proof with reflexivity.
+  of the root of `a` to `b` and build a proof of `a = b`.
 * recursive function `simpRec` which gets a specific
   root-rewriting function as an argument, tries to apply
   it anywhere inside the term, and returns the proof of equality in the same format.
@@ -410,37 +464,50 @@ It gets a list of equalities `rules`, and tries to find a rule
 `rule : e = b` that exactly matches the given expression `e`.
 It doesn't dig inside `e`, and only tries to perform the step once.
 -/
-def simpBase (rules : List Expr) (u : Level) (α : Q(Sort u)) (a : Q($α)) :
-    MetaM (SimpResult a) := do
-  -- unfortunatelly, Qq-matching is not a friend with imperative constructions
-  -- such as `for .. do`, so we use a monadic alternative `List.findSomeM?`
-  let result? : Option (@SimpResult u α a)
-    ← rules.findSomeM? fun rule =>
-      have rule : Q(Prop) := rule
-      match rule with
-      | ~q($a = $b) =>
-        return (some ⟨b, rule⟩)
-      | _ => return none
-  return match result? with
-  | some result => result
-  | none => SimpResult.rfl a
+def simpBase (rules : List Expr) (a : Expr) :
+    MetaM SimpResult := do
+  for rule in rules do
+    let eq ← whnf (← inferType rule)
+    let some (_, ar, br) := eq.app3? ``Eq | throwError "Not an equality: {rule} : {eq}"
+    if ← isDefEq a ar then
+      return {res := br, pf? := some rule}
+  return {res := a, pf? := none}
 
-#check Qq.isDefEqQ
+#check SimpResult.forall
+#check forallTelescope
 
-#check congr
+-- TODO, fix & get rid of Qq
 
 partial -- simplification could repeat indefinitely, `partial` skips termination check
-def simpRec (base : (u : Level) → (α : Q(Sort u)) → (a : Q($α)) →  MetaM (SimpResult a))
-  {u : Level} {α : Q(Sort u)} (a : Q($α)) : MetaM (SimpResult a) := do
+def simpRec (base : Expr →  MetaM SimpResult)
+  (a : Expr) : MetaM SimpResult := do
   let an ← whnf a
-  let ⟨u, α, an⟩ ← inferTypeQ an
-  let (b, pf) : (Expr × Expr) := match an with
+  let res? : Option (Expr × Expr) ← match an with
   | .app f arg =>
-    sorry
-  | .forallE name bi _ _ =>
-    sorry
-  | _ => let ⟨b, pf⟩ := SimpResult.rfl an; (b, pf)
-  -- Qq-matching doesn't work for highly abstract terms
+    let ⟨u, α, arg⟩ ← inferTypeQ arg
+    let ⟨v, β, app⟩ ← inferTypeQ an
+    have f : Q($α → $β) := f
+    let rf ← simpRec base f
+    let rArg ← simpRec base arg
+    pure <| some (rf.app rArg).toExpr
+  | .forallE name t body bi =>
+    if body.hasLooseBVars then -- not a dependent implication -> impl_congr
+      let .sort u ← whnf (← inferType t) | throwError "not a type{indentExpr t}"
+      let .sort v ← whnf (← inferType body) | throwError "not a type{indentExpr body}"
+      have t : Q(Sort u) := t
+      have body : Q(Sort v) := body
+      let rt ← simpRec base q($t)
+      let rBody ← simpRec base q($body)
+      pure <| some (SimpResult.impl rt rBody).toExpr
+    else -- dependent implication -> forall_congr
+      forallBoundedTelescope an (some 1) (fun fvars body => do
+        match ← checkTypeQ body q(Prop) with
+        | none => pure none
+        | some body =>
+          _ -- TODO
+      )
+  | _ => pure none
+  -- pure (SimpResult.rfl an).toExpr
   -- TODO: whnf & match on
   -- (f a)
   -- (a → b)
@@ -453,7 +520,7 @@ def simpRec (base : (u : Level) → (α : Q(Sort u)) → (a : Q($α)) →  MetaM
   throwError "not finished"
 
 /-
-# (4) Unification - rewriting a quantified equality.
+# (5) Unification - rewriting a quantified equality.
 -/
 
 -- TODO:
@@ -464,7 +531,7 @@ def simpRec (base : (u : Level) → (α : Q(Sort u)) → (a : Q($α)) →  MetaM
 -- * explain & run isDefEq
 
 /-
-# (5) Collecting tagged lemmas
+# (6) Collecting tagged lemmas
 -/
 
 -- TODO: look into it, understand, explain
@@ -489,5 +556,5 @@ initialize gcongrExt : SimpleScopedEnvExtension ((Name × Name × Array Bool) ×
 -- TODO
 
 /-
-# (6) Simplification procedures - building upon existing simp infrastructure
+# (7) Simplification procedures - building upon existing simp infrastructure
 -/
