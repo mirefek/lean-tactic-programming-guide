@@ -9,7 +9,7 @@ open Qq
 # Writing rw / simp from scratch
 
 Content
-(1) What simp & rw do on proof term level, and what is the difference?
+(1) What `simp` & `rw` do on proof term level, and what is the difference?
 (2) Implementing `rw`.
 (3) Filling implicit arguments.
 (4) Implementing `simp`.
@@ -451,15 +451,15 @@ def SimpResult.forall (fv : Expr) (r : SimpResult) :
 /-
 ## Main functions `SimpRec` & `SimpBase`
 
-  TODO: explain better simpRec & simpBase, and fix the code below to the current
-  non-Qq `SimpResult` implementation (get rid of Qq usage).
+Later, we will also want to simplify quantified equations,
+so we split the simplification algorithm into two functions.
 
-To make it modular, we have
-* function `simpBase (...) a` that only tries to make a single rewrite step
-  of the root of `a` to `b` and build a proof of `a = b`.
-* recursive function `simpRec` which gets a specific
-  root-rewriting function as an argument, tries to apply
-  it anywhere inside the term, and returns the proof of equality in the same format.
+* Function `simpBase (...) a` only tries to make a single rewrite step
+  of the root of `a` to `b` and build a proof of `a = b`. This function will
+  later get an upgrade.
+* Recursive function `simpRec` gets a specific root-rewriting function as
+  an argument (currently `simpBase`), and tries to apply it anywhere inside
+  the term, and returns the proof of equality in the same format.
 -/
 
 /--
@@ -487,12 +487,12 @@ def simpRec (base : Expr →  MetaM SimpResult)
     let rArg ← simpRec base arg
     rf.app rArg
   | .forallE _name t body _bi =>
-    if body.hasLooseBVars then -- not a dependent implication -> impl_congr
+    if !body.hasLooseBVars then -- not a dependent implication -> impl_congr
       let rt ← simpRec base t
       let rBody ← simpRec base body
       rt.impl rBody
     else -- dependent implication -> forall_congr
-      if !(← isProof an) then -- forall_congr only works on a Prop
+      if !(← isProp an) then -- forall_congr only works on a Prop
         pure <| .empty an
       else
         -- In general, `forallTelescope` unpacks forall a bit like `intros` creating
@@ -514,7 +514,54 @@ def simpRec (base : Expr →  MetaM SimpResult)
   let resRepeat ← simpRec base res.expr
   res.trans resRepeat
 
--- TODO: test & bugfixes :-)
+-- Let's finally try it out!
+example (a b c : Nat) (p : Nat → Nat → Prop)
+    (h₁ : a = b) (h₂ : b = c) (finish : ∀ x, p x c → p x c) :
+    (∀ x, p x a → p x a) := by
+  -- simp only [h₁, h₂]
+  run_tacq goal =>
+    let res ← simpRec (simpBase [h₁, h₂]) goal.ty
+    logInfo m!"Simplified to {res.expr}"
+    match res.pf? with
+    | none => throwError "Simplification made no progress"
+    | some pf =>
+      logInfo m!"proof of equality: {pf}"
+      -- use Eq.mpr as before, this time using `mkAppM`
+      let m ← mkFreshExprSyntheticOpaqueMVar res.expr
+      goal.mvarId!.assign <| ← mkAppM ``Eq.mpr #[pf, m]
+      replaceMainGoal [m.mvarId!]
+  exact finish
+
+/-
+## Using `simp` infrastructure with a `simproc`
+
+The library `simp` is similarly modular as ours, with a few extra features. Often,
+we don't have to implement the entire `simpRec` from scratch. Let us show how
+to perform the same simplification using our own `simpBase` but library's `simp`.
+-/
+
+example (a b c : Nat) (p : Nat → Nat → Prop)
+    (h₁ : a = b) (h₂ : b = c) (finish : ∀ x, p x c → p x c) :
+    (∀ x, p x a → p x a) := by
+  -- simp only [h₁, h₂]
+  run_tacq goal =>
+    let ctx : Simp.Context ← Simp.mkContext -- optional lemmas & extra congruence lemmas
+    let methods : Simp.Methods := { pre := fun e => do
+      let res ← simpBase [h₁, h₂] e
+      -- Very straightforward translation from our `SimpResult`
+      -- to the library `Simp.Result`.
+      -- In general, `Simp.Step` can guard the repetition inside inside `simp`
+      -- by deciding on `done` / `visit` / `continue`
+      if res.pf?.isNone then return Simp.Step.continue
+      else return Simp.Step.visit { expr := res.expr, proof? := res.pf? }
+    }
+    let (res, _stats) ← Simp.main goal.ty ctx (methods := methods)
+    logInfo m!"Simplified to {res.expr}"
+    -- we could match on `res.proof?` as above but we can also use library function
+    let mvarIdNew ← applySimpResultToTarget goal.mvarId! goal.ty res
+    if mvarIdNew == goal.mvarId! then throwError "simp made no progress"
+    replaceMainGoal [mvarIdNew]
+  exact finish
 
 /-
 # (5) Unification - rewriting a quantified equality.
@@ -549,9 +596,3 @@ initialize gcongrExt : SimpleScopedEnvExtension ((Name × Name × Array Bool) ×
     addEntry := fun m (n, lem) => m.insert n ((m.getD n #[]).push lem)
     initial := {}
   }
-
--- TODO
-
-/-
-# (7) Simplification procedures - building upon existing simp infrastructure
--/
