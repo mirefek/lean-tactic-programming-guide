@@ -307,8 +307,10 @@ example (a b : Nat) (h : a = b) : 2*a + b = 2*b + a := by
 /-
 # (3) Filling implicit arguments.
 
-To implement `simp`, we will need to call common theorems to combine partial proofs.
-Let us look at the example of transitivity.
+When we were applying `congrArg` and `Eq.mpr`, we were explicitly filling
+the universe levels, and implicit argument. With `simp`, we will need to
+build much more terms, so let us look at the options we have with the example
+of transitivity.
 -/
 example (a b c : Nat) (pf1 : a = b) (pf2 : b = c) : True := by
   -- we would like to emulate calling something like
@@ -368,13 +370,13 @@ and see what suits your needs better.
 
 First, we define a structure capturing the result.
 
-The output of a simplification run on `a` is a new expression `res`
-of the same type, and a proof `pf : a = res`. Sometimes, `simp` doesn't
+The output of a simplification run on `a` is a new expression `expr`
+of the same type, and a proof `pf : a = expr`. Sometimes, `simp` doesn't
 perform any simplification, in that case, we allow `pf` to be `none`
 (although we could also close it using `rfl`)
 -/
 structure SimpResult where
-  res : Expr
+  expr : Expr
   pf? : Option Expr
 
 -- Note that the library Simp also has a similar Result structure, both
@@ -384,12 +386,14 @@ structure SimpResult where
 
 -- let's prepare some ways to combine results together
 
+def SimpResult.empty (e : Expr) : SimpResult := {expr := e, pf? := none}
+
 #check Eq.refl
 /-- Gets the proof, possibly building `rfl` if it was none. -/
 def SimpResult.getProof (r : SimpResult) : MetaM Expr :=
   match r.pf? with
   | some pf => pure pf
-  | none => mkAppM ``Eq.refl #[r.res]
+  | none => mkAppM ``Eq.refl #[r.expr]
 -- see also `mkEqRefl`
 
 #check Eq.trans
@@ -398,32 +402,32 @@ def SimpResult.trans (r1 r2 : SimpResult) : MetaM SimpResult := do
   match r1.pf? with
   | none => return r2
   | some pf1 => match r2.pf? with
-    | none => return {res := r2.res, pf? := some pf1}
+    | none => return {expr := r2.expr, pf? := some pf1}
     | some pf2 =>
       let pf ← mkAppM ``Eq.trans #[pf1, pf2]
-      return {res := r2.res, pf? := some pf}
+      return {expr := r2.expr, pf? := some pf}
 
 #check congr
 #check congrArg
 #check congrFun
 /-- Combines `f = g`, and `a = b` into `f a = g b` using `congr` -/
 def SimpResult.app (rf rArg : SimpResult) : MetaM SimpResult := do
-  let res := mkApp rf.res rArg.res
+  let expr := mkApp rf.expr rArg.expr
   match rf.pf? with
   | none => match rArg.pf? with
-    | none => return {res := res, pf? := none}
-    | some pfArg => return {res := res, pf? := ← mkAppM ``congrArg #[rf.res, pfArg]}
+    | none => return .empty expr
+    | some pfArg => return {expr := expr, pf? := ← mkAppM ``congrArg #[rf.expr, pfArg]}
   | some pff => match rArg.pf? with
-    | none => return {res := res, pf? := ← mkAppM ``congrFun #[pff, rArg.res]}
-    | some pfArg => return {res := res, pf? := ← mkAppM ``congr #[pff, pfArg]}
+    | none => return {expr := expr, pf? := ← mkAppM ``congrFun #[pff, rArg.expr]}
+    | some pfArg => return {expr := expr, pf? := ← mkAppM ``congr #[pff, pfArg]}
 -- see also `mkCongr`, `mkCongrArg`, `mkCongrFun`
 
 #check implies_congr
 /-- from `a = b`, `c = d` proves `a → c = b → d` using `implies_congr` on `SimpResult`s -/
 def SimpResult.impl (r1 r2 : SimpResult) : MetaM SimpResult := do
-  let res := mkForall Name.anonymous BinderInfo.default r1.res r2.res
-  if r1.pf?.isNone && r2.pf?.isNone then return {res := res, pf? := none}
-  return {res := res, pf? := some <|
+  let expr := mkForall Name.anonymous BinderInfo.default r1.expr r2.expr
+  if r1.pf?.isNone && r2.pf?.isNone then return .empty expr
+  return {expr := expr, pf? := some <|
     ← mkAppM ``implies_congr #[← r1.getProof, ← r2.getProof]
   }
 -- see also `mkImpCongr`
@@ -435,13 +439,13 @@ and builds a proof of `(∀ x, p x) = (∀ x, q x)` using forall_congr.
 -/
 def SimpResult.forall (fv : Expr) (r : SimpResult) :
     MetaM SimpResult := do
-  let res ← mkForallFVars #[fv] r.res -- bind fv into forall
+  let expr ← mkForallFVars #[fv] r.expr -- bind `fv` into forall `expr := ∀ x, q x`
   match r.pf? with
-  | none => return {res := res, pf? := none}
+  | none => return .empty expr
   | some pf =>
-    let pf ← mkLambdaFVars #[fv] pf -- bind fv into lambda, `pf : ∀ x, p x = q x`
+    let pf ← mkLambdaFVars #[fv] pf -- bind `fv` into lambda, `pf : ∀ x, p x = q x`
     let pf ← mkAppM ``forall_congr #[pf] -- `pf : (∀ x, p x) = (∀ x, q x)`
-    return {res := res, pf? := some pf}
+    return {expr := expr, pf? := some pf}
 -- see also `mkForallCongr`
 
 /-
@@ -470,54 +474,47 @@ def simpBase (rules : List Expr) (a : Expr) :
     let eq ← whnf (← inferType rule)
     let some (_, ar, br) := eq.app3? ``Eq | throwError "Not an equality: {rule} : {eq}"
     if ← isDefEq a ar then
-      return {res := br, pf? := some rule}
-  return {res := a, pf? := none}
-
-#check SimpResult.forall
-#check forallTelescope
-
--- TODO, fix & get rid of Qq
+      return {expr := br, pf? := some rule}
+  return .empty a
 
 partial -- simplification could repeat indefinitely, `partial` skips termination check
 def simpRec (base : Expr →  MetaM SimpResult)
   (a : Expr) : MetaM SimpResult := do
-  let an ← whnf a
-  let res? : Option (Expr × Expr) ← match an with
+  let an ← whnfR a -- weaker than whnf, do not expand definitions
+  let res ← match an with -- try to simplify the inside of the expression
   | .app f arg =>
-    let ⟨u, α, arg⟩ ← inferTypeQ arg
-    let ⟨v, β, app⟩ ← inferTypeQ an
-    have f : Q($α → $β) := f
     let rf ← simpRec base f
     let rArg ← simpRec base arg
-    pure <| some (rf.app rArg).toExpr
-  | .forallE name t body bi =>
+    rf.app rArg
+  | .forallE _name t body _bi =>
     if body.hasLooseBVars then -- not a dependent implication -> impl_congr
-      let .sort u ← whnf (← inferType t) | throwError "not a type{indentExpr t}"
-      let .sort v ← whnf (← inferType body) | throwError "not a type{indentExpr body}"
-      have t : Q(Sort u) := t
-      have body : Q(Sort v) := body
-      let rt ← simpRec base q($t)
-      let rBody ← simpRec base q($body)
-      pure <| some (SimpResult.impl rt rBody).toExpr
+      let rt ← simpRec base t
+      let rBody ← simpRec base body
+      rt.impl rBody
     else -- dependent implication -> forall_congr
-      forallBoundedTelescope an (some 1) (fun fvars body => do
-        match ← checkTypeQ body q(Prop) with
-        | none => pure none
-        | some body =>
-          _ -- TODO
+      if !(← isProof an) then -- forall_congr only works on a Prop
+        pure <| .empty an
+      else
+        -- In general, `forallTelescope` unpacks forall a bit like `intros` creating
+        -- new free variables and putting them into the local context within
+        -- the inner do scope. Here we want just a single step, hence
+        -- `forallBoundedTelescope` with `some 1`
+        forallBoundedTelescope an (some 1) (fun fvars body => do
+          -- this `body` has a fvar, contrary to the bare `body`
+          -- we got by unpacking the `Expr` which uses a `bvar`
+          let res ← simpRec base body
+          res.forall fvars[0]!
       )
-  | _ => pure none
-  -- pure (SimpResult.rfl an).toExpr
-  -- TODO: whnf & match on
-  -- (f a)
-  -- (a → b)
-  -- ∀ x, p x
-  -- TODO: simplify children
-  -- let prev : SimpResult := none.
-  -- match base e with
-  -- | none => prev
-  -- | some res =>
-  throwError "not finished"
+  | _ => pure <| .empty an
+  let resBase ← base res.expr -- This is the step actually doing the rewrite!
+  if resBase.pf?.isNone then
+    return res
+  -- if rewrite was successful, we repeat in case there is more to do
+  let res ← res.trans resBase
+  let resRepeat ← simpRec base res.expr
+  res.trans resRepeat
+
+-- TODO: test & bugfixes :-)
 
 /-
 # (5) Unification - rewriting a quantified equality.
