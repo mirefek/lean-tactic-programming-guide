@@ -548,10 +548,9 @@ example (a b c : Nat) (p : Nat → Nat → Prop)
     let ctx : Simp.Context ← Simp.mkContext -- optional lemmas & extra congruence lemmas
     let methods : Simp.Methods := { pre := fun e => do
       let res ← simpBase [h₁, h₂] e
-      -- Very straightforward translation from our `SimpResult`
-      -- to the library `Simp.Result`.
-      -- In general, `Simp.Step` can guard the repetition inside inside `simp`
-      -- by deciding on `done` / `visit` / `continue`
+      -- Very straightforward translation from our `SimpResult` to the library
+      -- `Simp.Step`. In general, `Simp.Step` can guard the repetition inside
+      -- inside `simp` by deciding on `done` / `visit` / `continue`
       if res.pf?.isNone then return Simp.Step.continue
       else return Simp.Step.visit { expr := res.expr, proof? := res.pf? }
     }
