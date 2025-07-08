@@ -314,7 +314,7 @@ of transitivity.
 -/
 example (a b c : Nat) (pf1 : a = b) (pf2 : b = c) : True := by
   -- we would like to emulate calling something like
-  have pf3 := Eq.trans pf1 pf2
+  have pf3 : a = c := Eq.trans pf1 pf2
   -- but the full expression we want to build is
   have pf3' := @Eq.trans.{1} Nat a b c pf1 pf2
   -- on tactic level, we have several ways to construct it
@@ -322,8 +322,8 @@ example (a b c : Nat) (pf1 : a = b) (pf2 : b = c) : True := by
     -- (a) low-level constructing the term, we have to provide all the arguments
     let lowlev := mkApp6 ((mkConst ``Eq.trans [1])) (mkConst ``Nat) a b c pf1 pf2
     logInfo m!"lowlev = {lowlev}"
-    -- (b) using `Qq`
-    let pfQ := q(Eq.trans $pf1 $pf2)
+    -- (b) using `Qq`, the type annotation is optional
+    let pfQ : Q($a = $c) := q(Eq.trans $pf1 $pf2)
     logInfo m!"pfq = {pfQ}"
     -- (c) using `mkAppM`
     let pfAppM ← mkAppM ``Eq.trans #[pf1, pf2]
