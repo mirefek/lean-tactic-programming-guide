@@ -238,7 +238,8 @@ def decomposeEq (pf : Expr) : MetaM (Level × Expr × Expr × Expr) := do
     return (u, α, a, b)
   | _ => throwError "given term {pf} : {t} is not a proof of equality"
 
--- we also could have used `Expr.app3? ``Eq` but that doesn't give us the level
+-- we also could have used `Expr.app3? ``Eq`, or
+-- `matchEq?` but that doesn't give us the level
 #check Expr.app3?
 
 /-
