@@ -72,20 +72,10 @@ by a single call of `congrArg`.
 /-
 (intermezzo) the role of `id`
 You can also see some `id` in the proof which is the identity function.
-In proofs, it is used for typing -- `id` can change a type of its value
-in case they are definitionally equal.
-
-Consider `weirdNat` defined with a obfuscated type
-definitionally equal to `Nat`.
+It is used for typing -- `id` can change a type of its value in case
+they are definitionally equal.
+On metaprogramming level, this appeared in the proof by using
 -/
-def weirdNat : (fun t _ => t) Nat 8 := 4
-#check weirdNat
--- just an annotation will not change the type
-#check (weirdNat : Nat)
--- but using id could
-#check @id Nat weirdNat
-
--- On metaprogramming level, this appeared in the proof by using
 #check mkExpectedPropHint
 
 /-
@@ -107,7 +97,8 @@ theorem simp_example (a b c : Nat) (f : Nat → Nat) (p : Nat → Prop)
 #print simp_example
 
 /-
-This is muc hmore messy but after prettification, you could get the following proof term.
+This is much more messy but after prettification,
+you could get the following proof term.
 -/
 example (a b c : Nat) (f : Nat → Nat) (p : Nat → Prop)
     (h_eq  : ∀ x : Nat, f x = x) (h_finish : p (a + c + b + c + a + c)) :
@@ -135,12 +126,10 @@ You can notice that
 * The expression is build gradually, not in one go.
 * We actually run `h_eq a` twice in the proof term, because
   we are rewriting with it on two places, contrary to `rw`.
--/
 
-/-
 You might think that the `simp` approach is the more
 flexible / general but there are cases where `simp` doesn't work,
-and `rw` succeeds. This is due to type dependency issues as in
+and `rw` succeeds. This is due to type dependency issues such as in
 the following example.
 -/
 
@@ -151,9 +140,8 @@ example (a b : Nat) (h_eq : a = b) (p : ∀ n : Nat, Fin n → Prop)
   exact h
 
 /-
-Sure, in more basic cases, simp is able to rewrite
-inside binders because it uses special rules for that.
-Let's look at the following proof.
+Sure, in more basic cases, simp is able to rewrite inside binders because
+it uses special rules for that. Let's look at the following proof.
 -/
 theorem simp_example2 (a b : Nat) (p : Nat → Nat → Prop)
     (h : a = b) (finish : ∀ x, p x b → p x b) : (∀ x, p x a → p x a) := by
@@ -181,9 +169,9 @@ and build a mapping
 `fun x => ... x ... x ...`
 
 This is called an abstraction, first we need to locate all `A`s in `e`,
-and replace them with a corresponding `bvar`.
-A `bvar` is a variable pointing to a quantifier with an index
-where quantifiers are indexed from the inner-most to the outer-most.
+and replace them with a corresponding `bvar`. A `bvar` is a variable
+pointing to a quantifier with an index where quantifiers are indexed
+from the inner-most to the outer-most.
 To know the index for the `bvar`, we carry `offset`.
 -/
 /-- (tutorial function) simplified `kabstract` -/
@@ -214,7 +202,7 @@ def abstractToMapping (e a : Expr) : MetaM Expr := do
   let e ← instantiateMVars e
   let body ← myAbstract e a  -- replace `a` with a `bvar`
   return mkLambda
-    `x -- name for the variable, due to `bvar`s, we don't have to care about collisions,
+    `X -- name for the variable, due to `bvar`s, we don't have to care about collisions,
     BinderInfo.default -- could be also e.g. `implicit` (braces instead of parentheses)
     (← inferType a) -- type for the variable
     body
@@ -223,7 +211,7 @@ def abstractToMapping (e a : Expr) : MetaM Expr := do
 example (A : Nat) (h : -- some crazy expression containing various constructions
     ∀ (y : Nat), (y = A) →
     let z := A + y
-    y + A = (fun (x : Nat) => x + A - y) z -- no worry about the same name
+    y + A = (fun (X : Nat) => X + A - y) z -- no worry about the same name
   ) : True := by
   -- `run_tacq` is like `run_tac` but makes the context directly accessible
   -- not useful for writing tactics but handy for testing
@@ -318,7 +306,8 @@ example (a b : Nat) (h : a = b) : 2*a + b = 2*b + a := by
 There are two places where normalization happens in the code of `rw` above.
 * Calling `whnf` in decomposing equality
 * The `isDefEq` check to determine whether to perform the abstraction.
-For example:
+
+Full normalization is not always desired, let us see an example of what can happen.
 -/
 def myAdd (a b : Nat) : Nat := a + b
 def myEq (a b : Nat) : Prop := (a = b)
@@ -330,17 +319,22 @@ example (a b c : Nat) (h : myEq (myAdd a b) (myAdd b c))
     logInfo m!"{h.ty}\n→ {htn}" -- whnf unpacks `myEq`
     let (u,α,lhs,rhs) ← decomposeEq h
     logInfo m!"lhs := {lhs}, rhs := {rhs}" -- so `decomposeEq` splits the equality
+    -- This is a nice feature :-)
+
     -- similarly isDefEq unpacks the definition
     logInfo m!"({h.ty}) ?= ({htn}) : {← isDefEq h.ty htn}"
     -- so myAbstract catches such occurence too
-    logInfo m!"Abstracting ({a}) in ({h2.ty}):\n{← abstractToMapping h2.ty a}"
+    logInfo m!"Abstracting ({lhs}) in ({h2.ty}):\n{← abstractToMapping h2.ty lhs}"
+    -- This is rather confusing, we see no `(myAdd a b)` in `a + b = c`.
   trivial
 
 -- In both cases, normalization is performed based on the Meta.Config
 #check Meta.Config
 /-
 To see all the options, Ctrl-click on that type to see all the options with their
-explanation. There are many options to look at such as `beta`, `zeta`, `zetaDelta`...
+explanation. There are many options to look at such as `beta`, `zeta`, `zetaDelta`.
+For example, to prevent `1 + 3` being identified with 4, we need
+`offsetCnstrs := false`
 
 Here, we focus on the example of transparency -- expanding definitions.
 -/
@@ -350,10 +344,9 @@ Here, we focus on the example of transparency -- expanding definitions.
 #check TransparencyMode.reducible -- prevent the above definition expansion
 
 /-
-Let us show some ways to set reducible transparency. The config lives
-in so-called Reader monad, meaning it is read-only. We cannot change
-the config for the outside code but we can run a local piece of code
-with a changed config.
+Let us see how to set reducible transparency. The config lives
+in a Reader monad, meaning it is read-only. We cannot change the config
+for the outside code but we can run a local piece of code with a changed config.
 -/
 #check withConfig
 #check withTransparency
@@ -363,16 +356,20 @@ example (a b : Nat) (h1 : a = b) (h2 : myEq a b) : True := by
     logInfo m!"isDefEq default: {← isDefEq h1.ty h2.ty}"
     -- general context-changing scope
     withConfig (fun cfg => {cfg with transparency := .reducible}) do
+      -- anything running here ras reducible trnasparency
       logInfo m!"isDefEq reducible1: {← isDefEq h1.ty h2.ty}"
-    -- setting transparency in particular
+    -- setting transparency in particular has a shortcut
     withTransparency .reducible do
-      logInfo m!"isDefEq reducible1: {← isDefEq h1.ty h2.ty}"
+      logInfo m!"isDefEq reducible2: {← isDefEq h1.ty h2.ty}"
+    -- we should do this when matching `lhs` to an expression
+
     -- the same works with whnf
     logInfo m!"whnf default: {← whnf h2.ty}"
     withTransparency .reducible do
       logInfo m!"whnf reducible1: {← whnf h2.ty}"
     -- `whnfR` is a shortcut for above
     logInfo m!"whnf reducible2: {← whnfR h2.ty}"
+    -- we should do this in `simp`
   trivial
 
 /-
@@ -384,11 +381,11 @@ and with `simp`, we will need to build much more terms. Fortunatelly, there are
 ways to avoid this work.
 -/
 example (a b c : Nat) (pf1 : a = b) (pf2 : b = c) : True := by
-  -- we would like to emulate calling something like
+  -- we would like to emulate calling
   have pf3 : a = c := Eq.trans pf1 pf2
   -- but the full expression we want to build is
   have pf3' := @Eq.trans.{1} Nat a b c pf1 pf2
-  -- on tactic level, we have several ways to construct it
+  -- on tactic level, we have several ways to build it
   run_tacq
     -- (a) low-level constructing the term, we have to provide all the arguments
     let lowlev := mkApp6 ((mkConst ``Eq.trans [1])) (mkConst ``Nat) a b c pf1 pf2
@@ -455,7 +452,11 @@ structure SimpResult where
 #check Simp.Result
 #check Simp.ResultQ
 
--- let's prepare some ways to combine results together
+/-
+Let's prepare some ways to combine results together. There is not
+too much going on, so you can skip to the implementation of
+`SimpResult.forall` which is a bit more interesting.
+-/
 
 def SimpResult.empty (e : Expr) : SimpResult := {expr := e, pf? := none}
 
@@ -524,31 +525,31 @@ def SimpResult.forall (fv : Expr) (r : SimpResult) :
 -- see also `mkForallCongr`
 
 /-
-## Main functions `SimpRec` & `SimpBase`
+## Main functions `SimpRec` & `simpProcBasic`
 
 Later, we will also want to simplify tagged quantified equations,
 so we split the simplification algorithm into two functions.
 
-* Function `simpBase (...) a` only tries to make a single rewrite step
+* Function `simpProcBasic (...) a` only tries to make a single rewrite step
   of the root of `a` to `b` and build a proof of `a = b`. This function will
   later get an upgrade.
 * Recursive function `simpRec` gets a specific root-rewriting function as
-  an argument (currently `simpBase`), and tries to apply it anywhere inside
+  an argument (currently `simpProcBasic`), and tries to apply it anywhere inside
   the term, and returns the proof of equality in the same format.
 -/
 
 /-- (tutorial function)
 Simple root-rewriting function.
 It gets a list of equalities `rules`, and tries to find a rule
-`rule : e = b` that exactly matches the given expression `e`.
-It doesn't dig inside `e`, and only tries to perform the step once.
+`rule : a = b` that exactly matches the given expression `a`.
+It doesn't dig inside `a`, and only tries to perform the step once.
 -/
-def simpBase (rules : List Expr) (a : Expr) :
+def simpProcBasic (rules : List Expr) (a : Expr) :
     MetaM SimpResult := do
   for rule in rules do
     let eq ← whnf (← inferType rule)
     let some (_, ar, br) := eq.app3? ``Eq | throwError "Not an equality: {rule} : {eq}"
-    if ← isDefEq a ar then
+    if ← withTransparency .reducible (isDefEq a ar) then
       return {expr := br, pf? := some rule}
   return .empty a
 
@@ -556,18 +557,18 @@ def simpBase (rules : List Expr) (a : Expr) :
 Recursive rewrite inside a term.
 -/
 partial -- simplification could repeat indefinitely, `partial` skips termination check
-def simpRec (base : Expr →  MetaM SimpResult)
+def simpRec (simProc : Expr →  MetaM SimpResult)
   (a : Expr) : MetaM SimpResult := do
   let an ← whnfR a
   let res ← match an with -- try to simplify the inside of the expression
   | .app f arg =>
-    let rf ← simpRec base f
-    let rArg ← simpRec base arg
+    let rf ← simpRec simProc f
+    let rArg ← simpRec simProc arg
     rf.app rArg
   | .forallE _name t body _bi =>
     if !body.hasLooseBVars then -- not a dependent implication -> impl_congr
-      let rt ← simpRec base t
-      let rBody ← simpRec base body
+      let rt ← simpRec simProc t
+      let rBody ← simpRec simProc body
       rt.impl rBody
     else -- dependent implication -> forall_congr
       if !(← isProp an) then -- forall_congr only works on a Prop
@@ -576,36 +577,36 @@ def simpRec (base : Expr →  MetaM SimpResult)
         -- In general, `forallTelescope` unpacks forall a bit like `intros` creating
         -- new free variables and putting them into the local context within
         -- the inner do scope. Here we want just a single step, hence
-        -- `forallBoundedTelescope` with `some 1`
+        -- `forallBoundedTelescope` with `maxFVars? := some 1`
         forallBoundedTelescope an (some 1) (fun fvars body => do
           -- this `body` has a fvar, contrary to the bare `body`
           -- we got by unpacking the `Expr` which uses a `bvar`
-          let res ← simpRec base body
+          let res ← simpRec simProc body
           res.forall fvars[0]!
       )
   | _ => pure <| .empty an
-  let resBase ← base res.expr -- This is the step actually doing the rewrite!
-  if resBase.pf?.isNone then
+  let resProc ← simProc res.expr -- This is the step actually doing the rewrite!
+  if resProc.pf?.isNone then
     return res
   -- if rewrite was successful, we repeat in case there is more to do
-  let res ← res.trans resBase
-  let resRepeat ← simpRec base res.expr
+  let res ← res.trans resProc
+  let resRepeat ← simpRec simProc res.expr
   res.trans resRepeat
 
 /--
-(tutorial function)
+(tutorial function) Simplifies the goal with a `simpProc`
 -/
-def mySimpGoal (base : Expr → MetaM SimpResult) : TacticM Unit := do
+def mySimpGoal (simProc : Expr → MetaM SimpResult) : TacticM Unit := do
   let goal ← getMainGoal
   goal.withContext do
     let target ← goal.getType
-    let res ← simpRec base target
+    let res ← simpRec simProc target -- run simplification
     logInfo m!"Simplified to {res.expr}"
     match res.pf? with
     | none => throwError "mySimpGoal made no progress"
     | some pf =>
       logInfo m!"proof of equality: {pf}"
-      -- use Eq.mpr as before, this time using `mkAppM`
+      -- use Eq.mpr as with `rw`, this time using `mkAppM`
       let m ← mkFreshExprSyntheticOpaqueMVar res.expr
       goal.assign <| ← mkAppM ``Eq.mpr #[pf, m]
       replaceMainGoal [m.mvarId!]
@@ -615,15 +616,15 @@ example (a b c : Nat) (p : Nat → Nat → Prop)
     (h₁ : a = b) (h₂ : b = c) (finish : ∀ x, p x c → p x c) :
     (∀ x, p x a → p x a) := by
   -- simp only [h₁, h₂]
-  run_tacq mySimpGoal (simpBase [h₁, h₂])
+  run_tacq mySimpGoal (simpProcBasic [h₁, h₂])
   exact finish
 
 /-
-## Using `simp` infrastructure with a `simproc`
+## Using `simp` infrastructure
 
 The library `simp` is similarly modular as ours, with a few extra features. Often,
 we don't have to implement the entire `simpRec` from scratch. Let us show how
-to perform the same simplification using our own `simpBase` but library's `simp`.
+to perform the same simplification using our own `simpProcBasic` but library's `simp`.
 -/
 
 #print Simp.Simproc
@@ -637,7 +638,7 @@ example (a b c : Nat) (p : Nat → Nat → Prop)
   run_tacq goal =>
     let ctx : Simp.Context ← Simp.mkContext -- optionally lemmas & extra congruence lemmas
     let method : Simp.Simproc := fun e : Expr => do
-      let res ← simpBase [h₁, h₂] e
+      let res ← simpProcBasic [h₁, h₂] e
       -- Very straightforward translation from our `SimpResult` to the library
       -- `Simp.Step`. In general, `Simp.Step` can guard the repetition inside
       -- `simp` by deciding on `done` / `visit` / `continue`
@@ -655,7 +656,7 @@ example (a b c : Nat) (p : Nat → Nat → Prop)
 /-
 # (6) Unification - rewriting a quantified equality.
 
-Now, we want to be able to rewrite quantified equality, say we have the rule
+Now, we want to be able to rewrite quantified equality, for example we have a rule
 `∀ a b : Nat, p a + b = a + q b`,
 and we want to use it to rewrite `p 1 + 2` to `1 + q 2`.
 The main idea is to first replace the quantified variables with metavariables to obtain
@@ -674,9 +675,9 @@ example (p : Nat → Nat) : True := by
     let pattern := q($p $a + $b)
     let rhs := q($a + $p $b)
     let target := q($p 1 + 2)
-    logInfo m!"matching {target} with {pattern} → {rhs}" -- not assigned
+    logInfo m!"matching {target} with {pattern}\n→ {rhs}" -- not assigned
     if ← isDefEq pattern target then -- The magic happens here!
-      logInfo m!"matched {target} with {pattern} → {rhs}" -- assigned
+      logInfo m!"matched {target} with {pattern}\n→ {rhs}" -- assigned
     else
       logInfo "Couldn't match"
     logInfo m!"If match succeesed, the mvars are now assigned: a = {a}, b = {b}"
@@ -689,7 +690,7 @@ example (p : Nat → Nat) : True := by
   trivial
 
 /-
-In fact, `isDefEq` is not just an innocent check, it can modify the proofstate
+As we saw, `isDefEq` is not just an innocent check, it can modify the proofstate
 by assiging metavariables.
 Besides checking modulo basic reductions, it tries to find variable assignment that
 satisfies the equality. If there exist an assignment, the asignment is performed in
@@ -719,8 +720,8 @@ run_meta
   logInfo m!"mSO1 = mSO2: {← isDefEq mSO1 mSO2}"
 
 /-
-Often, we want to prevent existing mvars to be assigned. This can be done
-by entering a new `MetavarContext.depth`.
+Often, we also want to prevent previously created mvars to be assigned no matter
+of their kind. This can be done by entering a new `MetavarContext.depth`.
 -/
 #check withNewMCtxDepth
 run_meta
@@ -735,8 +736,6 @@ run_meta
     logInfo m!"mSyn = mNat1: {← isDefEq mSyn mNat1}"
     logInfo m!"{mSyn} = {mNat1}"
 /-
-In rewriting, we want to only assign the currently build variables,
-so we use this feature.
 
 ## Quantified `rw`
 
@@ -761,7 +760,7 @@ example (a b : Nat) (f : Nat → Nat) (p : Nat → Prop)
       -- the same rewrite code as before
       let imp ← withTransparency .reducible <| proveRwImp pf_eq goal.ty
       logInfo m!"after: {pf_eq} : {eq}"
-      -- we need to instantiate the variables before exiting the Mctx context
+      -- we need to instantiate the variables before exiting the MCtx context
       instantiateMVars imp
     let imp_t ← inferType imp
     logInfo m!"imp_t2 := {imp_t}"
@@ -792,11 +791,7 @@ Look at the file `TutorialAux/Tag.lean` where these two steps are done.
 -/
 #check myExt
 
-/-
-Since we imported this `Tutorial/Tag.lean`, we can now tag some theorems with `my_tag`
--/
-
-#check Nat.add_assoc
+-- Since we imported `TutorialAux/Tag.lean`, we can tag some theorems with `my_tag`
 
 @[my_tag] theorem add_assoc_rev (a b c : Nat) :
   a + (b + c) = (a + b) + c := (Nat.add_assoc a b c).symm
@@ -815,12 +810,12 @@ run_meta
     logInfo m!"{e} : {t}"
 
 /-
-Now, we have all the ingredients to an alternative to `simpBase`.
+Now, we have all the ingredients to an alternative to `simpProcBasic`.
 This will use tagged theorems (tagged when the is run), and allow
 quantified theorems.
 -/
-#check simpBase
-def simpWithTagged (expr : Expr) : MetaM SimpResult := do
+#check simpProcBasic
+def simpProcTag (expr : Expr) : MetaM SimpResult := do
   withNewMCtxDepth do
     let state := myExt.getState (← getEnv)
     for (e,t) in state do
@@ -835,7 +830,7 @@ def simpWithTagged (expr : Expr) : MetaM SimpResult := do
 
 example (a : Nat) (p : Nat → Prop) (h : p (4*a + 2*a + a)) :
     p ( (a+a+a)+a+(a+a+a) ) := by
-  run_tac mySimpGoal simpWithTagged
+  run_tac mySimpGoal simpProcTag
   exact h
 
 /-
@@ -847,7 +842,7 @@ it can accept theorems with universe levels.
 attribute [my_tag] eq_self
 
 example (a : Nat) : a + a = 2 * a := by
-  run_tac mySimpGoal simpWithTagged
+  run_tac mySimpGoal simpProcTag
   exact True.intro
 
 -- Hints:
