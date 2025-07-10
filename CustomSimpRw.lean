@@ -20,10 +20,7 @@ Content
 (4) Implementing `simp`.
 (5) Unification - rewriting a quantified equality.
 (6) Collecting tagged lemmas
-
-Left for another file
-* Normalization details
-* Unification details
+(7) Normalization / unification options
 -/
 
 /-
@@ -210,7 +207,7 @@ def myAbstract (e a : Expr) (offset : Nat := 0) : MetaM Expr := do
 #check kabstract
 
 -- Now, we can build the mapping
-/-- (tutorial function) Wraps the result of `kabstract` to a lambda. -/
+/-- (tutorial function) Runs `kabstract`, and wraps the result to a lambda. -/
 def abstractToMapping (e a : Expr) : MetaM Expr := do
   -- make sure that all previous mvar assignments were applied in `e`
   -- this is necessary to recurse the term, not for `isDefEq`, so `a` doesn't need it
@@ -642,8 +639,8 @@ to find a match. We do it by setting the transparency:
 #check TransparencyMode.default -- expand definitions
 #check TransparencyMode.reducible -- expands only `abbrev`
 /-
-We will cover the options for unification / normalization in more detail in another
-file. Now let's finish the implementation by turning quantifiers into metavariables.
+We will cover the options for unification / normalization later.
+Now let's finish the implementation by turning quantifiers into metavariables.
 The function to do it is `forallMetaTelescope`
 -/
 #check forallMetaTelescope
@@ -688,7 +685,7 @@ Look at the file `TutorialAux/Tag.lean` where these two steps are done.
 #check myExt
 
 /-
-Since we imported this file, we can now tag some theorems with `my_tag`
+Since we imported this `Tutorial/Tag.lean`, we can now tag some theorems with `my_tag`
 -/
 
 #check Nat.add_assoc
@@ -749,3 +746,19 @@ example (a : Nat) : a + a = 2 * a := by
 -- the pair `(e,t)` might not be ideal. Also remember that the metavariables
 -- must be introduced when trying to apply a theorem, not at initialization
 -- because we want different mvar instantiations at different places.
+
+/-
+# (7) Normalization / unification options
+
+TODO:
+unification only:
+* metavariable kind
+* metavariable level
+common `Meta.Config` options
+* transparency
+* beta, zeta, zetaDelta?
+  which are the most important?
+  otherwise, we can just point the reader to the course code
+  of `Meta.Config`.
+-/
+#check Meta.Config
