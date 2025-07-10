@@ -166,19 +166,19 @@ Say we are rewriting `A = B` in some expression
 `e := ... A ... A ...`
 First, we want to locate all the `a`-s in the expression,
 and build a mapping
-`fun x => ... x ... x ...`
+`fun X => ... X ... X ...`
 
 This is called an abstraction, first we need to locate all `A`s in `e`,
 and replace them with a corresponding `bvar`. A `bvar` is a variable
 pointing to a quantifier with an index where quantifiers are indexed
 from the inner-most to the outer-most.
-To know the index for the `bvar`, we carry `offset`.
+To determine which `bvar` index to use, we carry `offset`.
 -/
 /-- (tutorial function) simplified `kabstract` -/
 def myAbstract (e a : Expr) (offset : Nat := 0) : MetaM Expr := do
   if !e.hasLooseBVars then  -- we cannot rewrite a subterm containing a variable bound in `e`
     if (← isDefEq e a) then  -- check if already `a` is already the root
-      return mkBVar offset  -- same as `Expr.bvar offset`
+      return mkBVar offset  -- replace with bvar
   -- otherwise, we recurse
   match e with
   | .app f x         => return e.updateApp! (← myAbstract f a offset) (← myAbstract x a offset)
