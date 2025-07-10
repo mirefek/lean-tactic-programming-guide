@@ -15,12 +15,12 @@ open Qq
 
 Content
 (1) What `simp` & `rw` do on proof term level, and what is the difference?
-(2) Implementing `rw`.
-(3) Filling implicit arguments.
-(4) Implementing `simp`.
-(5) Unification - rewriting a quantified equality.
-(6) Collecting tagged lemmas
-(7) Normalization / unification options
+(2) Implementing `rw`
+(3) Options for normalization
+(4) Filling implicit arguments
+(5) Implementing `simp`
+(6) Unification - rewriting a quantified equality
+(7) Collecting tagged lemmas
 -/
 
 /-
@@ -313,7 +313,70 @@ example (a b : Nat) (h : a = b) : 2*a + b = 2*b + a := by
   rfl
 
 /-
-# (3) Filling implicit arguments.
+# (3) Options for normalization
+
+There are two places where normalization happens in the code of `rw` above.
+* Calling `whnf` in decomposing equality
+* The `isDefEq` check to determine whether to perform the abstraction.
+For example:
+-/
+def myAdd (a b : Nat) : Nat := a + b
+def myEq (a b : Nat) : Prop := (a = b)
+
+example (a b c : Nat) (h : myEq (myAdd a b) (myAdd b c))
+    (h2 : a + b = c) : True := by
+  run_tacq
+    let htn ← whnf h.ty
+    logInfo m!"{h.ty}\n→ {htn}" -- whnf unpacks `myEq`
+    let (u,α,lhs,rhs) ← decomposeEq h
+    logInfo m!"lhs := {lhs}, rhs := {rhs}" -- so `decomposeEq` splits the equality
+    -- similarly isDefEq unpacks the definition
+    logInfo m!"({h.ty}) ?= ({htn}) : {← isDefEq h.ty htn}"
+    -- so myAbstract catches such occurence too
+    logInfo m!"Abstracting ({a}) in ({h2.ty}):\n{← abstractToMapping h2.ty a}"
+  trivial
+
+-- In both cases, normalization is performed based on the Meta.Config
+#check Meta.Config
+/-
+To see all the options, Ctrl-click on that type to see all the options with their
+explanation. There are many options to look at such as `beta`, `zeta`, `zetaDelta`...
+
+Here, we focus on the example of transparency -- expanding definitions.
+-/
+#check Meta.Config.transparency
+-- The most typical options are
+#check TransparencyMode.default
+#check TransparencyMode.reducible -- prevent the above definition expansion
+
+/-
+Let us show some ways to set reducible transparency. The config lives
+in so-called Reader monad, meaning it is read-only. We cannot change
+the config for the outside code but we can run a local piece of code
+with a changed config.
+-/
+#check withConfig
+#check withTransparency
+
+example (a b : Nat) (h1 : a = b) (h2 : myEq a b) : True := by
+  run_tacq
+    logInfo m!"isDefEq default: {← isDefEq h1.ty h2.ty}"
+    -- general context-changing scope
+    withConfig (fun cfg => {cfg with transparency := .reducible}) do
+      logInfo m!"isDefEq reducible1: {← isDefEq h1.ty h2.ty}"
+    -- setting transparency in particular
+    withTransparency .reducible do
+      logInfo m!"isDefEq reducible1: {← isDefEq h1.ty h2.ty}"
+    -- the same works with whnf
+    logInfo m!"whnf default: {← whnf h2.ty}"
+    withTransparency .reducible do
+      logInfo m!"whnf reducible1: {← whnf h2.ty}"
+    -- `whnfR` is a shortcut for above
+    logInfo m!"whnf reducible2: {← whnfR h2.ty}"
+  trivial
+
+/-
+# (4) Filling implicit arguments.
 
 When we were applying `congrArg` and `Eq.mpr`, we were explicitly filling
 the universe levels, and implicit argument. Already there, it was a bit annoying,
@@ -372,7 +435,7 @@ and see what suits your needs better.
 -/
 
 /-
-# (4) Implementing `simp`
+# (5) Implementing `simp`
 
 ## SimpResult
 
@@ -495,7 +558,7 @@ Recursive rewrite inside a term.
 partial -- simplification could repeat indefinitely, `partial` skips termination check
 def simpRec (base : Expr →  MetaM SimpResult)
   (a : Expr) : MetaM SimpResult := do
-  let an ← whnfR a -- weaker than whnf, do not expand definitions
+  let an ← whnfR a
   let res ← match an with -- try to simplify the inside of the expression
   | .app f arg =>
     let rf ← simpRec base f
@@ -590,7 +653,7 @@ example (a b c : Nat) (p : Nat → Nat → Prop)
   exact finish
 
 /-
-# (5) Unification - rewriting a quantified equality.
+# (6) Unification - rewriting a quantified equality.
 
 Now, we want to be able to rewrite quantified equality, say we have the rule
 `∀ a b : Nat, p a + b = a + q b`,
@@ -599,6 +662,8 @@ The main idea is to first replace the quantified variables with metavariables to
 `p ?a + ?b = p ?b + ?a`
 Now the left hand side is structurally the same as `p 1 + 2` up to the
 metavariables, so we need to find the right value for them.
+
+## Unification
 
 Finding values for metavariables actually happens automatically:
 -/
@@ -618,29 +683,69 @@ example (p : Nat → Nat) : True := by
     -- Note that using MessageData is crucial - the expressions `a`, `b` didn't change,
     -- only the way we look at them inside MetaM Monad.
     logInfo s!"As a string, we still see the metavariables:\na = {a}, b = {b}"
+    let a2 ← instantiateMVars a
+    let b2 ← instantiateMVars b
+    logInfo s!"Unless we instantiate:\na2 = {a2}, b2 = {b2}"
   trivial
 
 /-
 In fact, `isDefEq` is not just an innocent check, it can modify the proofstate
-by assiging metavariables (with some rules forbidding it, such as syntheticOpaque).
+by assiging metavariables.
 Besides checking modulo basic reductions, it tries to find variable assignment that
 satisfies the equality. If there exist an assignment, the asignment is performed in
 the proofstate, and `isDefEq` return `true`. On the other hand, if the return value
 is `false`, we know there was no change in the proof state.
+
+## Controling assignable meta-variables
+
+There are two factors deciding whether a metavariable can be automatically
+assigned with `isDefEq`. We have already seen the meta-variable kind.
+-/
+run_meta
+  let mNat1 ← mkFreshExprMVarQ q(Nat) .natural `mNat1
+  let mNat2 ← mkFreshExprMVarQ q(Nat) .natural `mNat2
+  let mSyn1 ← mkFreshExprMVarQ q(Nat) .synthetic `mSyn1
+  let mSyn2 ← mkFreshExprMVarQ q(Nat) .synthetic `mSyn2
+  -- natural mvars prefer to be assigned over synthetic
+  logInfo m!"mNat1 = mSyn1: {← isDefEq mNat1 mSyn1}"
+  logInfo m!"mSyn2 = mNat2: {← isDefEq mSyn1 mNat1}"
+  logInfo m!"{mNat1} = {mSyn1}, {mNat2} = {mSyn2}"
+  -- but synthetic can be assigned too if needed
+  logInfo m!"mSyn1 = mSyn2: {← isDefEq mSyn1 mSyn2}"
+  logInfo m!"{mSyn1} = {mSyn2}"
+  -- contrary to synthetic opaque
+  let mSO1 ← mkFreshExprMVarQ q(Nat) .synthetic `mSO1
+  let mSO2 ← mkFreshExprMVarQ q(Nat) .synthetic `mSO2
+  logInfo m!"mSO1 = mSO2: {← isDefEq mSO1 mSO2}"
+
+/-
+Often, we want to prevent existing mvars to be assigned. This can be done
+by entering a new `MetavarContext.depth`.
+-/
+#check withNewMCtxDepth
+run_meta
+  let mNat1 ← mkFreshExprMVarQ q(Nat) .natural `mNat1
+  let mNat2 ← mkFreshExprMVarQ q(Nat) .natural `mNat2
+  -- normally, mNat would be prefered to be assigned,
+  -- we block it by entering a new level
+  withNewMCtxDepth do
+    logInfo m!"mNat1 = mNat2: {← isDefEq mNat1 mNat2}" -- now, they cannot be assigned
+    let mSyn ← mkFreshExprMVarQ q(Nat) .synthetic `mSyn
+    -- but a new synthetic can be assigned to them
+    logInfo m!"mSyn = mNat1: {← isDefEq mSyn mNat1}"
+    logInfo m!"{mSyn} = {mNat1}"
+/-
+In rewriting, we want to only assign the currently build variables,
+so we use this feature.
+
+## Quantified `rw`
 
 Since we used `isDefEq` in `myAbstract`, it should be no surprise now why
 rewriting with a quantified equality matches its first instantiation.
 The unification happens the first moment it can, and later `f a` cannot
 get unified with `f b`.
 
-It is time to also reduce the willingness of `isDefEq` to reduce the term
-to find a match. We do it by setting the transparency:
--/
-#check TransparencyMode.default -- expand definitions
-#check TransparencyMode.reducible -- expands only `abbrev`
-/-
-We will cover the options for unification / normalization later.
-Now let's finish the implementation by turning quantifiers into metavariables.
+Let us finish the implementation by turning quantifiers into metavariables.
 The function to do it is `forallMetaTelescope`
 -/
 #check forallMetaTelescope
@@ -649,14 +754,17 @@ example (a b : Nat) (f : Nat → Nat) (p : Nat → Prop)
     (h_eq  : ∀ x : Nat, f x = x) (h_finish : p (a + b + a + b)) :
     p (f a + f b + f a + f b) := by
   run_tacq goal =>
-    let (mvars, _, eq) ← forallMetaTelescope h_eq.ty -- turn quantifiers into mvars
-    let pf_eq := mkAppN h_eq mvars -- build the proof term
-    logInfo m!"before: {pf_eq} : {eq}"
-    -- the same rewrite code as before
-    let imp ← withTransparency .reducible <| proveRwImp pf_eq goal.ty
-    logInfo m!"after: {pf_eq} : {eq}"
+    let imp ← withNewMCtxDepth do
+      let (mvars, _, eq) ← forallMetaTelescope h_eq.ty -- turn quantifiers into mvars
+      let pf_eq := mkAppN h_eq mvars -- build the proof term
+      logInfo m!"before: {pf_eq} : {eq}"
+      -- the same rewrite code as before
+      let imp ← withTransparency .reducible <| proveRwImp pf_eq goal.ty
+      logInfo m!"after: {pf_eq} : {eq}"
+      -- we need to instantiate the variables before exiting the Mctx context
+      instantiateMVars imp
     let imp_t ← inferType imp
-    logInfo m!"imp_t := {imp_t}"
+    logInfo m!"imp_t2 := {imp_t}"
     let mt := imp_t.bindingDomain!
     let m ← mkFreshExprSyntheticOpaqueMVar mt
     goal.mvarId!.assign (mkApp imp m)
@@ -666,7 +774,7 @@ example (a b : Nat) (f : Nat → Nat) (p : Nat → Prop)
   trivial
 
 /-
-# (6) Collecting tagged lemmas
+# (7) Collecting tagged lemmas
 
 The standard `simp` doesn't need to be given the lemmas each usage, it uses
 all the lemmas tagged with `@[simp]`. Let us show an example to introduce
@@ -713,14 +821,17 @@ quantified theorems.
 -/
 #check simpBase
 def simpWithTagged (expr : Expr) : MetaM SimpResult := do
-  let state := myExt.getState (← getEnv)
-  for (e,t) in state do
-    let (mvars, _, eq) ← forallMetaTelescope t -- turn quantifiers into mvars
-    let pf := mkAppN e mvars -- build the proof term
-    let some (_, ar, br) := eq.app3? ``Eq | throwError "Not an equality: {pf} : {eq}"
-    if ← withTransparency .reducible (isDefEq expr ar) then
-      return {expr := br, pf? := some pf}
-  return .empty expr
+  withNewMCtxDepth do
+    let state := myExt.getState (← getEnv)
+    for (e,t) in state do
+      let (mvars, _, eq) ← forallMetaTelescope t -- turn quantifiers into mvars
+      let pf := mkAppN e mvars -- build the proof term
+      let some (_, ar, br) := eq.app3? ``Eq | throwError "Not an equality: {pf} : {eq}"
+      if ← withTransparency .reducible (isDefEq expr ar) then
+        let br ← instantiateMVars br
+        let pf ← instantiateMVars pf
+        return {expr := br, pf? := some pf}
+    return .empty expr
 
 example (a : Nat) (p : Nat → Prop) (h : p (4*a + 2*a + a)) :
     p ( (a+a+a)+a+(a+a+a) ) := by
@@ -746,19 +857,3 @@ example (a : Nat) : a + a = 2 * a := by
 -- the pair `(e,t)` might not be ideal. Also remember that the metavariables
 -- must be introduced when trying to apply a theorem, not at initialization
 -- because we want different mvar instantiations at different places.
-
-/-
-# (7) Normalization / unification options
-
-TODO:
-unification only:
-* metavariable kind
-* metavariable level
-common `Meta.Config` options
-* transparency
-* beta, zeta, zetaDelta?
-  which are the most important?
-  otherwise, we can just point the reader to the course code
-  of `Meta.Config`.
--/
-#check Meta.Config
