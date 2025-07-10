@@ -1,7 +1,7 @@
 import Batteries
 import Lean
 import Qq
-import TutorialAux.Tag -- for Section (6)
+import TutorialAux.Tag -- for Section (7)
 
 /-!
 This file explains and implements basic versions of `rw` & `simp` tactics.
