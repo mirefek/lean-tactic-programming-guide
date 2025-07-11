@@ -835,7 +835,7 @@ example (a : Nat) (p : Nat → Prop) (h : p (4*a + 2*a + a)) :
   exact h
 
 /-
-Exercise: Update the code for `Tag.lean` & `simpWithTagged` so that
+Exercise: Update the code for `Tag.lean` & `simpProcTag` so that
 it can accept theorems with universe levels.
 -/
 
