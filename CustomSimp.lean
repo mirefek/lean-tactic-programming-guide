@@ -155,7 +155,7 @@ at the end of the section.
 Just don't forget to delete it when you move on ;-).
 
 Hint for Qq: Qq can infer the instance too but you cannot (!!)
-pass it implicitly as `[Q(HAdd $α $α $α)]`.
+pass it implicitly as `[Q(HAdd $α $α $α)]` (as you might have discovered).
 So first, try to pass `Q(HAdd $α $α $α)` as an explicit argument,
 and insert `q(inferInstance)` to the call (analogously multiplication).
 Later, you can do a trick with a default argument filled with
@@ -434,7 +434,7 @@ instance simpResultToEmoji : ExceptToEmoji Exception SimpResult where
 
 set_option trace.MyTrace true in
 run_meta
-  let res : SimpResult ← withTraceNodeBefore `MyTrace (pure "Pack") do
+  let _res : SimpResult ← withTraceNodeBefore `MyTrace (pure "Pack") do
     let expr := q(2)
     let pf : Q(1 + 1 = 2) := q(rfl)
     trace[MyTrace] "expr := {expr}"
