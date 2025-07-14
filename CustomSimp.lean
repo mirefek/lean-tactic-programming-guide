@@ -139,7 +139,9 @@ and see what suits your needs better.
 -/
 
 /-
-Exercise: Define a function `myCalculation` which takes two numbers
+## Exercise
+
+Define a function `myCalculation` which takes two numbers
 `a b : Nat / Int / Rat`, and builds `a + b * a`
 automatically infering their type, and the appropriate typeclass
 instance. Try:
