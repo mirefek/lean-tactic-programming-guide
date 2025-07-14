@@ -1,7 +1,7 @@
 import Batteries
 import Lean
 import Qq
-import TutorialAux.Tag -- for Section (7)
+import TutorialAux.Init -- for Sections (5, 7)
 
 /-!
 # Tutorial: Writing `simp` from scratch
@@ -11,8 +11,9 @@ Content
 (2) Filling implicit arguments
 (3) Result structure
 (4) Basic implementation
-(5) Implementing simp inside binders
-(6) Collecting tagged lemmas
+(5) Debugging with traces
+(6) Implementing simp inside binders
+(7) Collecting tagged lemmas
 -/
 
 open Lean Meta Elab Tactic Qq
@@ -136,6 +137,49 @@ a bit finicky (doable but perhaps not as well suited for a tutorial).
 On the other hand, we encourage you to try building terms with `Qq` too,
 and see what suits your needs better.
 -/
+
+/-
+Exercise: Define a function `myCalculation` which takes two numbers
+`a b : Nat / Int / Rat`, and builds `a + b * a`
+automatically infering their type, and the appropriate typeclass
+instance. Try:
+* specific functions, you can find them ;-)
+* `mkAppM`
+* `Qq`
+
+Tip: when editing the middle of the file, it might help to prevent
+Lean to from recompiling the rest of the file by typing `#exit`
+at the end of the section.
+Just don't forget to delete it when you move on ;-).
+
+Hint for Qq: Qq can infer the instance too but you cannot (!!)
+pass it implicitly as `[Q(HAdd $α $α $α)]`.
+So first, try to pass `Q(HAdd $α $α $α)` as an explicit argument,
+and insert `q(inferInstance)` to the call (analogously multiplication).
+Later, you can do a trick with a default argument filled with
+an `exact` tactic -- you need to fill it with a tactic to postpone
+the type inference.
+-/
+
+def myCalculation (a b : Expr) : MetaM Expr := do
+  return a
+
+-- preliminary, you will have to change the type signature to some `Q(...)`
+def myCalcQ2 (a : Expr) (b : Expr) : Expr := a
+
+example (a b : Nat) (c d : Int) (e f : Rat) : True := by
+  run_tacq
+    let ab ← myCalculation a b
+    -- let ab := myCalcQ a b
+    let cd ← myCalculation c d
+    -- let cd := myCalcQ c d
+    let ef ← myCalculation e f
+    -- let ef := myCalcQ e f
+    logInfo m!"ab := {ab}, cd := {cd}, ef := {ef}"
+    unless ← isDefEq ab q($a + $b*$a) do throwError "ab := {ab} != a+b*a"
+    unless ← isDefEq cd q($c + $d*$c) do throwError "cd := {cd} != c+d*c"
+    unless ← isDefEq ef q($e + $f*$e) do throwError "ef := {ef} != e+f*e"
+  trivial
 
 /-
 # (3) SimpResult
@@ -311,12 +355,117 @@ example (a b c : Nat) (p : Nat → Nat → Prop)
   exact finish
 
 /-
-# (5) Implementing simp inside binders
+# (5) Debugging with traces
+
+For basic debug prints, we can use `logInfo`, however:
+* we have to delete it when we want to hide the debug,
+* it can get messy when we print too many messages.
+
+Lean offers a system of traces for debugging purposes. We can
+display traces for many standard Lean functions. For example,
+`whnf` sometimes calls `trace[trace.Meta.whnf]`, so let us look
+at the debug prints.
+-/
+run_meta
+  let e1 : Q(Nat) := q(let x := 3; x^2)
+  -- setting the option manually, otherwise we would get much more
+  -- traces
+  let e2 ← withOptions (fun opt => opt.setBool `trace.Meta.whnf true) do
+    whnf e1
+  logInfo m!"logInfo e2: {e2}"
+
+-- We can also do this ourself
+run_meta
+  withOptions (fun opt => opt.setBool `trace.WhateverName true) do
+    trace[WhateverName] m!"Hello trace"
+
+/-
+But usually, we want to turn the trace on using `set_option`.
+Such option must be defined in another imported file. Here,
+we registered `MyTrace` in `TutorialAux/Init.Lean`. You get
+get to the definition by ctrl-clicking on `trace.MyTrace`
+in `set_option`.
+-/
+set_option trace.MyTrace true in -- try to comment out this line
+run_meta
+  trace[MyTrace] m!"Hello trace"
+
+-- as with any other option, we can also set the option globally with
+set_option trace.MyTrace true
+-- or unset
+set_option trace.MyTrace false
+
+/-
+## Tree Structure
+
+The traces can be packed into a tree with
+-/
+#check withTraceNode
+#check withTraceNode'
+#check withTraceNodeBefore
+
+-- for example
+set_option trace.MyTrace true in
+run_meta
+  trace[MyTrace] "Start"
+  let res? : Option Nat ← withTraceNodeBefore `MyTrace (pure "Pack 1") do
+    trace[MyTrace] "Start inside"
+    let a : Nat ← withTraceNode' `MyTrace do
+      trace[MyTrace] "Double inside"
+      pure (40, m!"obtaining 40")
+    trace[MyTrace] "Subresult {a}"
+    pure (some a) -- also try one of the following lines instead
+    -- return none
+    -- throwError "Crashed"
+  trace[MyTrace] "Result is {res?}"
+
+/-
+Notice that `withTraceNodeBefore` calculates the packed message
+at the beginning but the emoticon at the end. This emoticon depends
+on the calculated value, which is why we need `Option` or `Bool`
+as a return type. Alternatively, we can define `ExceptToEmoji` on
+a custom data type.
+-/
+
+instance simpResultToEmoji : ExceptToEmoji Exception SimpResult where
+  toEmoji x := exceptOptionEmoji (x.map SimpResult.pf?)
+
+set_option trace.MyTrace true in
+run_meta
+  let res : SimpResult ← withTraceNodeBefore `MyTrace (pure "Pack") do
+    let expr := q(2)
+    let pf : Q(1 + 1 = 2) := q(rfl)
+    trace[MyTrace] "expr := {expr}"
+    trace[MyTrace] "pf := {pf}"
+    pure ⟨expr, some pf⟩
+    -- pure ⟨expr, none⟩
+    -- throwError "oops"
+
+/-- (tutorial function) Trace SimpResult if nonempty -/
+def SimpResult.trace (res : SimpResult) : MetaM Unit := do
+  match res.pf? with
+  | some pf =>
+    trace[MyTrace] "=> {res.expr}"
+    withTraceNode' `MyTrace do
+      trace[MyTrace] pf
+      pure ((), "(proof term)")
+  | _ => pure ()
+
+/-
+# (6) Implementing simp inside binders
 
 Here, we look how to implement `simp` inside binders on our own without using
-library's `Simp.main`. If you look at the proof term in the example above,
-you can see use of special theorems digging into forall & implication:
+library's `Simp.main`. Let's look again how library's simp does it.
 -/
+theorem simp_example2 (a b c : Nat) (p : Nat → Nat → Prop)
+    (h₁ : a = b) (h₂ : b = c) (finish : ∀ x, p x c → p x c) :
+    (∀ x, p x a → p x a) := by
+  simp only [h₁, h₂]
+  exact finish
+
+#print simp_example2
+
+-- The proof term uses special theorems digging into forall & implication:
 #check implies_congr
 #check forall_congr
 
@@ -349,41 +498,48 @@ def SimpResult.forall (fv : Expr) (r : SimpResult) :
     return {expr := expr, pf? := some pf}
 -- see also `mkForallCongr`
 
--- Now, we need to
+-- Now, we need to update `simpRec0` to use them.
 
 /-- (tutorial function)
-Recursive rewrite inside a term.
+Recursive simplification inside a term with implications.
 -/
-partial -- simplification could repeat indefinitely, `partial` skips termination check
+partial
 def simpRec (simProc : Expr →  MetaM SimpResult)
   (a : Expr) : MetaM SimpResult := do
+  trace[MyTrace] "Simplifying {a}"
   let an ← whnfR a
-  let res ← match an with -- try to simplify the inside of the expression
-  | .app f arg =>
-    let rf ← simpRec simProc f
-    let rArg ← simpRec simProc arg
-    rf.app rArg
-  | .forallE _name t body _bi =>
-    if !body.hasLooseBVars then -- not a dependent implication -> impl_congr
-      let rt ← simpRec simProc t
-      let rBody ← simpRec simProc body
-      rt.impl rBody
-    else -- dependent implication -> forall_congr
-      if !(← isProp an) then -- forall_congr only works on a Prop
-        pure <| .empty an
-      else
-        -- In general, `forallTelescope` unpacks forall a bit like `intros` creating
-        -- new free variables and putting them into the local context within
-        -- the inner do scope. Here we want just a single step, hence
-        -- `forallBoundedTelescope` with `maxFVars? := some 1`
-        forallBoundedTelescope an (some 1) (fun fvars body => do
-          -- this `body` has a fvar, contrary to the bare `body`
-          -- we got by unpacking the `Expr` which uses a `bvar`
-          let res ← simpRec simProc body
-          res.forall fvars[0]!
-      )
-  | _ => pure <| .empty an
-  let resProc ← simProc res.expr -- This is the step actually doing the rewrite!
+  let res ← -- try to simplify the inside of the expression
+    withTraceNodeBefore `MyTrace (pure "inside") do
+    match an with
+    | .app f arg =>
+      let rf ← simpRec simProc f
+      let rArg ← simpRec simProc arg
+      rf.app rArg
+    | .forallE _name t body _bi =>
+      if !body.hasLooseBVars then -- not a dependent implication -> impl_congr
+        let rt ← simpRec simProc t
+        let rBody ← simpRec simProc body
+        rt.impl rBody
+      else -- dependent implication -> forall_congr
+        if !(← isProp an) then -- forall_congr only works on a Prop
+          pure <| .empty an
+        else
+          -- In general, `forallTelescope` unpacks forall a bit like `intros` creating
+          -- new free variables and putting them into the local context within
+          -- the inner do scope. Here we want just a single step, hence
+          -- `forallBoundedTelescope` with `maxFVars? := some 1`
+          forallBoundedTelescope an (some 1) (fun fvars body => do
+            -- this `body` has a fvar, contrary to the bare `body`
+            -- we got by unpacking the `Expr` which uses a `bvar`
+            let res ← simpRec simProc body
+            res.forall fvars[0]!
+        )
+    | _ => pure <| .empty an
+  res.trace
+  let resProc ←
+    withTraceNodeBefore `MyTrace (pure "root") do
+    simProc res.expr -- This is the step actually doing the rewrite!
+  resProc.trace
   if resProc.pf?.isNone then
     return res
   -- if rewrite was successful, we repeat in case there is more to do
@@ -398,18 +554,21 @@ def mySimpGoal (simProc : Expr → MetaM SimpResult) : TacticM Unit := do
   let goal ← getMainGoal
   goal.withContext do
     let target ← goal.getType
-    let res ← simpRec simProc target -- run simplification
-    logInfo m!"Simplified to {res.expr}"
+    let res ←
+      withTraceNodeBefore `MyTrace (pure "Build simp equation") do
+      simpRec simProc target -- run simplification
     match res.pf? with
     | none => throwError "mySimpGoal made no progress"
     | some pf =>
-      logInfo m!"proof of equality: {pf}"
+      trace[MyTrace] target
+      res.trace
       -- use Eq.mpr as with `rw`, this time using `mkAppM`
       let m ← mkFreshExprSyntheticOpaqueMVar res.expr
       goal.assign <| ← mkAppM ``Eq.mpr #[pf, m]
       replaceMainGoal [m.mvarId!]
 
 -- Test!
+set_option trace.MyTrace true in
 example (a b c : Nat) (p : Nat → Nat → Prop)
     (h₁ : a = b) (h₂ : b = c) (finish : ∀ x, p x c → p x c) :
     (∀ x, p x a → p x a) := by
@@ -418,7 +577,20 @@ example (a b c : Nat) (p : Nat → Nat → Prop)
   exact finish
 
 /-
-# (6) Collecting tagged lemmas
+Exercise: The implementation above works with ∀ but not with ∃.
+Update the function `simpRec` so that the following proof passes.
+-/
+set_option trace.MyTrace true in
+example (a b : Nat) (p : Nat → Nat → Prop)
+    (h : a = b) (finish : ∃ x, p x b) :
+    (∃ x, p x a) := by
+  -- simp only [h]
+  run_tacq mySimpGoal (simProcBasic [h])
+  exact finish
+
+
+/-
+# (7) Collecting tagged lemmas
 
 The standard `simp` doesn't need to be given the lemmas each usage, it uses
 all the lemmas tagged with `@[simp]`. Let us show an example to introduce
@@ -473,6 +645,7 @@ def simProcTag (expr : Expr) : MetaM SimpResult :=
         return {expr := br, pf? := some pf}
     return .empty expr
 
+set_option trace.MyTrace true in
 example (a : Nat) (p : Nat → Prop) (h : p (4*a + 2*a + a)) :
     p ( (a+a+a)+a+(a+a+a) ) := by
   run_tac mySimpGoal simProcTag

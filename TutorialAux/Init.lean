@@ -1,6 +1,9 @@
 import Lean
 open Lean Meta
 
+/-- A custom trace for teaching debugging features -/
+initialize registerTraceClass `MyTrace
+
 /--
 A custom environment extension to add a theorem name, and its type.
 We store these pairs (expr, type) in a simple Array.
