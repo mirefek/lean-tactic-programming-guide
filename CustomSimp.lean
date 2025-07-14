@@ -10,9 +10,9 @@ Content
 (1) What `simp` does on proof term level?
 (2) Filling implicit arguments
 (3) Result structure
-(4) Basic implementation
+(4) Basic `simp` implementation
 (5) Debugging with traces
-(6) Implementing simp inside binders
+(6) Implementing `simp` inside binders
 (7) Collecting tagged lemmas
 -/
 
@@ -247,7 +247,7 @@ def SimpResult.app (rf rArg : SimpResult) : MetaM SimpResult := do
 -- see also `mkCongr`, `mkCongrArg`, `mkCongrFun`
 
 /-
-# (4) Basic implementation
+# (4) Basic `simp` implementation
 
 We split the simplification algorithm into two functions.
 
@@ -454,7 +454,7 @@ def SimpResult.trace (res : SimpResult) : MetaM Unit := do
   | _ => pure ()
 
 /-
-# (6) Implementing simp inside binders
+# (6) Implementing `simp` inside binders
 
 Here, we look how to implement `simp` inside binders on our own without using
 library's `Simp.main`. Let's look again how library's simp does it.
