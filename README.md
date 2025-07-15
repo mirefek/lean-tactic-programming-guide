@@ -2,7 +2,7 @@
 
 Originally, this was a single Lean file, later we extended the tutorial with further files with more advanced topics.
 
-If you are a beginner, we recommend to start with is `TacticProgrammingGuide.lean`. These are 762 lines coverging the basics of Lean tactic writing.
+If you are a metaprogramming beginner, we recommend to start with `TacticProgrammingGuide.lean`. There are 762 lines coverging the basics of Lean tactic writing.
 We assume you already know Lean, and probably use VS Code,
 in that case clone this repository, or simply download [the file](TacticProgrammingGuide.lean).
 
