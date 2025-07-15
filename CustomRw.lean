@@ -303,7 +303,7 @@ example (a b : Nat) (h1 : a = b) (h2 : myEq a b) : True := by
   trivial
 
 /-
-# (6) Unification - rewriting a quantified equality.
+# (4) Unification - rewriting a quantified equality.
 
 Now, we want to be able to rewrite quantified equality, for example we have a rule
 `∀ a b : Nat, p a + b = a + q b`,
