@@ -1,11 +1,13 @@
 name = "tactic-programming-beginner-guide"
-version = "0.1.0"
-keywords = ["math"]
-defaultTargets = ["TacticProgrammingGuide"]
+version = "0.2.0"
+keywords = ["tutorial"]
 
 [leanOptions]
 pp.unicode.fun = true
 autoImplicit = false
+
+[[lean_lib]]
+name = "TutorialAux"
 
 [[require]]
 name = "Qq"
