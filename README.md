@@ -8,7 +8,7 @@ in that case clone this repository, or simply download [the file](TacticProgramm
 
 Alternatively, you can also copy it to [Lean 4 Web](https://live.lean-lang.org/) but you will miss the Ctrl-click feature.
 
-We tried to explain all the basic concepts but keep it beginner friendly.
+We tried to explain all the basic concepts but keep at least the introduction it beginner friendly.
 Enjoy learning Lean metaprogramming. If you are getting confused somewhere, it is probably not your fault. Let us know what needs more clarification in the [Zulip thread](https://leanprover.zulipchat.com/#narrow/channel/239415-metaprogramming-.2F-tactics/topic/Introduction.20to.20tactic.20programming/near/524164016).
 
 ## Content
