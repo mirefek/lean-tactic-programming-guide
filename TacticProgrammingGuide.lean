@@ -215,7 +215,7 @@ def n2 : Name := ``t1e -- double backtick: resolved name (resolved in the curren
 
 /-
 ### Showing / printing.
-Our basic printing function `logInfo` is a bit fancier that a you might expect.
+Our basic printing function `logInfo` is a bit fancier than what you might expect.
 In normal programming languages, we are used to a print function that takes a `String`.
 However, in Lean, `logInfo` takes a `Lean.MessageData`. This means that it can show a term
 with mouse hover showing types and ctrl+click to go to definitions.
