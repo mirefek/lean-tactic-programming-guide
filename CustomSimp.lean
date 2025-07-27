@@ -9,7 +9,7 @@ import TutorialAux.Init -- for Sections (5, 7)
 Content
 (1) What `simp` does on proof term level?
 (2) Filling implicit arguments
-(3) Result structure
+(3) Custom SimpResult datastructure
 (4) Basic `simp` implementation
 (5) Debugging with traces
 (6) Implementing `simp` inside binders
@@ -19,7 +19,7 @@ Content
 open Lean Meta Elab Tactic Qq
 
 /-
-# (1) What `simp` does on proof term level?
+## (1) What `simp` does on proof term level
 
 Simp doesn't do all its equal rewrites in one go like `rw`.
 Instead, it recursively dives into the term, and when
@@ -80,7 +80,7 @@ example (a b : Nat) (h_eq : a = b) (p : ∀ n : Nat, Fin n → Prop)
   exact h
 
 /-
-# (2) Filling implicit arguments.
+## (2) Filling implicit arguments
 
 When we were applying `congrArg` and `Eq.mpr` in `rw`, we were explicitly filling
 the universe levels, and implicit argument. Already there, it was a bit annoying,
@@ -139,7 +139,7 @@ and see what suits your needs better.
 -/
 
 /-
-## Exercise
+### Exercise
 
 Define a function `myCalculation` which takes two numbers
 `a b : Nat / Int / Rat`, and builds `a + b * a`
@@ -184,7 +184,7 @@ example (a b : Nat) (c d : Int) (e f : Rat) : True := by
   trivial
 
 /-
-# (3) SimpResult
+## (3) Custom SimpResult datastructure
 
 First, we define a structure capturing the result.
 
@@ -247,7 +247,7 @@ def SimpResult.app (rf rArg : SimpResult) : MetaM SimpResult := do
 -- see also `mkCongr`, `mkCongrArg`, `mkCongrFun`
 
 /-
-# (4) Basic `simp` implementation
+## (4) Basic `simp` implementation
 
 We split the simplification algorithm into two functions.
 
@@ -320,7 +320,7 @@ example (a b : Nat) (f : Nat → Nat) (h : ∀ x, f x = x)
   trivial
 
 /-
-## Using `simp` infrastructure
+### Using `simp` infrastructure
 
 The library `simp` is similarly modular as ours, with a few extra features. Often,
 we don't have to implement the entire `simpRec` from scratch. Let us show how
@@ -357,7 +357,7 @@ example (a b c : Nat) (p : Nat → Nat → Prop)
   exact finish
 
 /-
-# (5) Debugging with traces
+## (5) Debugging with traces
 
 For basic debug prints, we can use `logInfo`, however:
 * we have to delete it when we want to hide the debug,
@@ -398,7 +398,7 @@ set_option trace.MyTrace true
 set_option trace.MyTrace false
 
 /-
-## Tree Structure
+### Tree Structure
 
 The traces can be packed into a tree with
 -/
@@ -454,7 +454,7 @@ def SimpResult.trace (res : SimpResult) : MetaM Unit := do
   | _ => pure ()
 
 /-
-# (6) Implementing `simp` inside binders
+## (6) Implementing `simp` inside binders
 
 Here, we look how to implement `simp` inside binders on our own without using
 library's `Simp.main`. Let's look again how library's simp does it.
@@ -592,7 +592,7 @@ example (a b : Nat) (p : Nat → Nat → Prop)
 
 
 /-
-# (7) Collecting tagged lemmas
+## (7) Collecting tagged lemmas
 
 The standard `simp` doesn't need to be given the lemmas each usage, it uses
 all the lemmas tagged with `@[simp]`. Let us show an example to introduce
