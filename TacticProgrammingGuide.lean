@@ -124,7 +124,7 @@ Of course, this is not exhaustive. Advanced topics include
 * `partial` functions to bypass Lean's termination checker
 ...
 
-## (2) What really is a proof state
+## (2) What is a proof state
 
 On the core level, a proof is a term, a so called "proof term" that testifies the truth
 of the given proposition. When we are proving a theorem, at every moment, we have
@@ -152,7 +152,7 @@ theorem p_imp_p_true (p : Prop) : p → p ∧ True := by
   -- p_imp_p_true : p → p ∧ True := (fun h => And.intro h True.intro)
 
 /-
-## (3) What are the basic data structures around Lean metaprogramming
+## (3) Basic data structures around Lean metaprogramming
 
 * Expressions - `Lean.Expr`, `Qq`
 * data in expressions: `Lean.Name`, `Lean.MVarId`, `Lean.FVarId`
@@ -235,7 +235,7 @@ example : True := by
   trivial
 
 /-
-## (4) Basic API to modify the proof state
+## (4) Implementing basic tactics
 
 Let us write the code for the 4 tactics used in
 -/

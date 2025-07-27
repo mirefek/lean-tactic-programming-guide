@@ -16,7 +16,7 @@ open Lean Elab Meta Tactic
 open Qq
 
 /-
-# (1) What rw does on proof term level, and what is the difference?
+## (1) What `rw` does on proof term level
 
 Let as look at an example proof using `rw`.
 -/
@@ -64,9 +64,9 @@ On metaprogramming level, this appeared in the proof by using
 #check mkExpectedPropHint
 
 /-
-# (2) Implementing `rw`.
+## (2) Implementing basic `rw`
 
-## Abstracting a variable
+### Abstracting a variable
 
 In the basic version, we will be only rewriting a term
 with a single equality without quantifiers.
@@ -152,7 +152,7 @@ example (A : Nat) (h : -- some crazy expression containing various constructions
   trivial
 
 /-
-## Decomposing equality
+### Decomposing equality
 -/
 /-- (tutorial function)
 `decomposeEq` takes a proof of equality `pf : a = b`, where `(a b : α : Sort u)`,
@@ -173,7 +173,7 @@ def decomposeEq (pf : Expr) : MetaM (Level × Expr × Expr × Expr) := do
 #check Expr.app3?
 
 /-
-## Building proof term
+### Building proof term
 -/
 
 /--
@@ -232,7 +232,7 @@ example (a b : Nat) (h : a = b) : 2*a + b = 2*b + a := by
   rfl
 
 /-
-# (3) Options for normalization
+## (3) Options for normalization
 
 There are two places where normalization happens in the code of `rw` above.
 * Calling `whnf` in decomposing equality
@@ -303,7 +303,7 @@ example (a b : Nat) (h1 : a = b) (h2 : myEq a b) : True := by
   trivial
 
 /-
-# (4) Unification - rewriting a quantified equality.
+## (4) Unification - rewriting a quantified equality.
 
 Now, we want to be able to rewrite quantified equality, for example we have a rule
 `∀ a b : Nat, p a + b = a + q b`,
@@ -313,7 +313,7 @@ The main idea is to first replace the quantified variables with metavariables to
 Now the left hand side is structurally the same as `p 1 + 2` up to the
 metavariables, so we need to find the right value for them.
 
-## Unification
+### Unification
 
 Finding values for metavariables actually happens automatically:
 -/
@@ -346,7 +346,7 @@ satisfies the equality. If there exist an assignment, the asignment is performed
 the proofstate, and `isDefEq` return `true`. On the other hand, if the return value
 is `false`, we know there was no change in the proof state.
 
-## Controling assignable meta-variables
+### Controling assignable meta-variables
 
 There are two factors deciding whether a metavariable can be automatically
 assigned with `isDefEq`. We have already seen the meta-variable kind.
@@ -386,7 +386,7 @@ run_meta
     logInfo m!"{mSyn} = {mNat1}"
 /-
 
-## Quantified `rw`
+### Quantified `rw`
 
 Since we used `isDefEq` in `myAbstract`, it should be no surprise now why
 rewriting with a quantified equality matches its first instantiation.
