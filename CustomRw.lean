@@ -100,6 +100,13 @@ def myAbstract (e a : Expr) (offset : Nat := 0) : MetaM Expr := do
   | .forallE _ d b _ => return e.updateForallE! (← myAbstract d a offset) (← myAbstract b a (offset+1))
   | e                => return e
 
+/- Tip for filling a pattern for `match ... with` such as above
+* Type `by cases ...` instead
+* wait for a code action (lightbulb) and apply it (ctrl-dot-dot)
+* change `by cases` to `match`, and insert dots before constructors.
+You can try this by inserting `by cases e` line before the `match` line
+-/
+
 -- lean's implementation is slightly more advanced but still readable
 #check kabstract
 
@@ -137,7 +144,7 @@ def abstractToMapping (e a : Expr) : MetaM Expr := do
     (← inferType a) -- type for the variable
     body
 
--- Let's building the lambda
+-- Let's build the lambda
 example (A : Nat) (h : -- some crazy expression containing various constructions
     ∀ (y : Nat), (y = A) →
     let z := A + y
