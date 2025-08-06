@@ -23,8 +23,8 @@ So far, there are three tutorials of increasing difficulty. Although you can scr
 * [Implementing `rw` from scratch](CustomRw.lean): a tactic that does a single rewrite.
   * [What `rw` does on proof term level](CustomRw.lean#L19)
   * [Implementing basic `rw`](CustomRw.lean#L67)
-  * [Options for normalization](CustomRw.lean#L242)
-  * [Unification - rewriting a quantified equality.](CustomRw.lean#L313)
+  * [Options for normalization](CustomRw.lean#L235)
+  * [Unification - rewriting a quantified equality.](CustomRw.lean#L306)
 * [Implementing `simp` from scratch](CustomSimp.lean): more advanced expression manipulation.
   * [What `simp` does on proof term level](CustomSimp.lean#L22)
   * [Filling implicit arguments](CustomSimp.lean#L83)
