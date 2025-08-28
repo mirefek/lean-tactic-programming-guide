@@ -18,7 +18,7 @@ open Qq
 /-
 ## (1) What `rw` does on proof term level
 
-Let as look at an example proof using `rw`.
+Let us look at an example proof using `rw`.
 -/
 
 theorem rw_example (a b : Nat) (f : Nat → Nat) (p : Nat → Prop)
@@ -287,7 +287,7 @@ example (a b : Nat) (h1 : a = b) (h2 : myEq a b) : True := by
     logInfo m!"isDefEq default: {← isDefEq h1.ty h2.ty}"
     -- general context-changing scope
     withConfig (fun cfg => {cfg with transparency := .reducible}) do
-      -- anything running here ras reducible trnasparency
+      -- anything running here has reducible trnasparency
       logInfo m!"isDefEq reducible1: {← isDefEq h1.ty h2.ty}"
     -- setting transparency in particular has a shortcut
     withTransparency .reducible do
@@ -329,7 +329,7 @@ example (p : Nat → Nat) : True := by
       logInfo m!"matched {target} with {pattern}\n→ {rhs}" -- assigned
     else
       logInfo "Couldn't match"
-    logInfo m!"If match succeesed, the mvars are now assigned: a = {a}, b = {b}"
+    logInfo m!"If match succeeded, the mvars are now assigned: a = {a}, b = {b}"
     -- Note that using MessageData is crucial - the expressions `a`, `b` didn't change,
     -- only the way we look at them inside MetaM Monad.
     logInfo s!"As a string, we still see the metavariables:\na = {a}, b = {b}"
@@ -358,14 +358,14 @@ run_meta
   let mSyn2 ← mkFreshExprMVarQ q(Nat) .synthetic `mSyn2
   -- natural mvars prefer to be assigned over synthetic
   logInfo m!"mNat1 = mSyn1: {← isDefEq mNat1 mSyn1}"
-  logInfo m!"mSyn2 = mNat2: {← isDefEq mSyn1 mNat1}"
+  logInfo m!"mNat2 = mSyn2: {← isDefEq mNat2 mSyn2}"
   logInfo m!"{mNat1} = {mSyn1}, {mNat2} = {mSyn2}"
   -- but synthetic can be assigned too if needed
   logInfo m!"mSyn1 = mSyn2: {← isDefEq mSyn1 mSyn2}"
   logInfo m!"{mSyn1} = {mSyn2}"
   -- contrary to synthetic opaque
-  let mSO1 ← mkFreshExprMVarQ q(Nat) .synthetic `mSO1
-  let mSO2 ← mkFreshExprMVarQ q(Nat) .synthetic `mSO2
+  let mSO1 ← mkFreshExprMVarQ q(Nat) .syntheticOpaque `mSO1
+  let mSO2 ← mkFreshExprMVarQ q(Nat) .syntheticOpaque `mSO2
   logInfo m!"mSO1 = mSO2: {← isDefEq mSO1 mSO2}"
 
 /-
