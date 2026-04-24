@@ -405,12 +405,17 @@ The traces can be packed into a tree with
 #check withTraceNode
 #check withTraceNode'
 #check withTraceNodeBefore
+/--  (tutorial function) More convenient version of `withTraceNodeBefore` for tutorial:
+  Traces a simple string / expression instead of running a function returning monad.  -/
+def withTraceNodeBefore' {α μ : Type} {m : Type → Type} [Monad m] [MonadTrace m] {ε : Type} [MonadRef m] [AddMessageContext m] [MonadOptions m] [always : MonadAlwaysExcept ε m] [MonadLiftT BaseIO m] [ExceptToTraceResult ε α] [ToMessageData μ] (cls : Name) (msg : μ) (k : m α) (collapsed : Bool := true) (tag : String := "") : m α :=
+  withTraceNodeBefore cls (fun _ ↦ pure (toMessageData msg)) k collapsed tag
 
 -- for example
 set_option trace.MyTrace true in
 run_meta
   trace[MyTrace] "Start"
-  let res? : Option Nat ← withTraceNodeBefore `MyTrace (pure "Pack 1") do
+  let res? : Option Nat
+      ← withTraceNodeBefore' `MyTrace "Pack 1" do
     trace[MyTrace] "Start inside"
     let a : Nat ← withTraceNode' `MyTrace do
       trace[MyTrace] "Double inside"
@@ -424,17 +429,20 @@ run_meta
 /-
 Notice that `withTraceNodeBefore` calculates the packed message
 at the beginning but the emoticon at the end. This emoticon depends
-on the calculated value, which is why we need `Option` or `Bool`
-as a return type. Alternatively, we can define `ExceptToEmoji` on
+on the calculated value, which works by default on `Option` or `Bool`
+as a return type. Alternatively, we can define `ExceptToTraceResult` on
 a custom data type.
 -/
-
-instance simpResultToEmoji : ExceptToEmoji Exception SimpResult where
-  toEmoji x := exceptOptionEmoji (x.map SimpResult.pf?)
+instance : ExceptToTraceResult Exception SimpResult where
+  toTraceResult x := match (x.map SimpResult.pf?) with
+    | .ok (some _) => .success -- ✅️
+    | .ok none => .failure     -- ❌️
+    | .error _ => .error       -- 💥️
 
 set_option trace.MyTrace true in
 run_meta
-  let _res : SimpResult ← withTraceNodeBefore `MyTrace (pure "Pack") do
+  let _res : SimpResult
+      ← withTraceNodeBefore' `MyTrace "Pack 2" do
     let expr := q(2)
     let pf : Q(1 + 1 = 2) := q(rfl)
     trace[MyTrace] "expr := {expr}"
@@ -511,7 +519,7 @@ def simpRec (simProc : Expr →  MetaM SimpResult)
   trace[MyTrace] "Simplifying {a}"
   let an ← whnfR a
   let res ← -- try to simplify the inside of the expression
-    withTraceNodeBefore `MyTrace (pure "inside") do
+    withTraceNodeBefore' `MyTrace "inside" do
     match an with
     | .app f arg =>
       let rf ← simpRec simProc f
@@ -539,7 +547,7 @@ def simpRec (simProc : Expr →  MetaM SimpResult)
     | _ => pure <| .empty an
   res.trace
   let resProc ←
-    withTraceNodeBefore `MyTrace (pure "root") do
+    withTraceNodeBefore' `MyTrace "root" do
     simProc res.expr -- This is the step actually doing the rewrite!
   resProc.trace
   if resProc.pf?.isNone then
@@ -557,7 +565,7 @@ def mySimpGoal (simProc : Expr → MetaM SimpResult) : TacticM Unit := do
   goal.withContext do
     let target ← goal.getType
     let res ←
-      withTraceNodeBefore `MyTrace (pure "Build simp equation") do
+      withTraceNodeBefore' `MyTrace "Build simp equation" do
       simpRec simProc target -- run simplification
     match res.pf? with
     | none => throwError "mySimpGoal made no progress"

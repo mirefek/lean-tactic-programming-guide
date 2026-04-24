@@ -1,11 +1,11 @@
-{"version": "1.1.0",
+{"version": "1.2.0",
  "packagesDir": ".lake/packages",
  "packages":
  [{"url": "https://github.com/leanprover-community/batteries",
    "type": "git",
    "subDir": null,
    "scope": "leanprover-community",
-   "rev": "a8aacd18dc8dc1c27b4bd180ea0c9615e16f7497",
+   "rev": "5169c93a9be986ac9d937fed59c89302cf7cd62a",
    "name": "batteries",
    "manifestFile": "lake-manifest.json",
    "inputRev": "main",
@@ -15,11 +15,12 @@
    "type": "git",
    "subDir": null,
    "scope": "leanprover-community",
-   "rev": "1ef3dac0f872ca6aaa7d02e015427e06dd0b6195",
+   "rev": "1cc7e819b9b9bc1e87c9edcccb62e0269e00a809",
    "name": "Qq",
    "manifestFile": "lake-manifest.json",
    "inputRev": "master",
    "inherited": false,
    "configFile": "lakefile.toml"}],
  "name": "«tactic-programming-beginner-guide»",
- "lakeDir": ".lake"}
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
